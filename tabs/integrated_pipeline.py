@@ -13,13 +13,24 @@ Single-page workflow:
 import html as html_module
 import logging
 import os
+import shutil
+import subprocess
+import tempfile
+import urllib.request
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from urllib.error import HTTPError
 
 import gradio as gr
+import numpy as np
 import pandas as pd
 import requests
+from meeko import MoleculePreparation, PDBQTWriterLegacy
 from openai import OpenAI
 from rdkit import Chem
 from rdkit.Chem import AllChem, Descriptors, Draw
+
+# Import docking worker from separate module (avoids Gradio in worker processes)
+from tabs.docking_worker import dock_single_compound
 
 # Set up logging
 logging.basicConfig(
@@ -601,26 +612,217 @@ def _apply_rule_of_5(compounds_state):
 # ── Step 4 — Binding Activity Ranking ──────────────────────────────────
 
 
-def _rank_by_activity(ro5_state):
-    """Rank compounds by experimental binding data."""
-    logger.info("=== STEP 4: Ranking by binding activity ===")
+def _calculate_optimal_workers() -> int:
+    """Calculate optimal number of parallel workers based on available resources."""
+    import multiprocessing
+
+    # Get CPU cores (use 'spawn' context to avoid fork issues with Gradio)
+    total_cpus = multiprocessing.cpu_count()
+
+    # Try to get available RAM
+    try:
+        import psutil
+        available_ram_gb = psutil.virtual_memory().available / (1024**3)
+
+        # Estimate: Each Vina process uses ~300-500MB RAM
+        # Use conservative 500MB estimate
+        ram_based_workers = int(available_ram_gb / 0.5)
+
+        # Also check current CPU usage
+        cpu_usage = psutil.cpu_percent(interval=0.1)
+        # If CPU is already busy, reduce workers
+        if cpu_usage > 50:
+            available_cpu_fraction = (100 - cpu_usage) / 100
+            cpu_based_workers = max(1, int(total_cpus * available_cpu_fraction))
+        else:
+            # Leave 1-2 cores for system
+            cpu_based_workers = max(1, total_cpus - 2)
+
+        # Use minimum of RAM and CPU constraints
+        optimal = min(ram_based_workers, cpu_based_workers)
+
+        logger.info(
+            f"Resource detection: {total_cpus} CPUs, {available_ram_gb:.1f}GB RAM available, "
+            f"CPU usage {cpu_usage:.0f}% → {optimal} workers"
+        )
+
+    except ImportError:
+        # psutil not available, use conservative estimate
+        # Leave 2 cores for system, use conservative estimate
+        optimal = max(1, total_cpus - 2)
+        logger.info(
+            f"psutil not available, using conservative estimate: "
+            f"{total_cpus} CPUs → {optimal} workers"
+        )
+
+    # Ensure at least 1 worker, cap at 32 for stability
+    return max(1, min(optimal, 32))
+
+
+def _fetch_pdb_file(pdb_id: str) -> str:
+    """Fetch PDB file text from RCSB."""
+    pdb_id = pdb_id.strip().upper()
+    url = f"https://files.rcsb.org/download/{pdb_id}.pdb"
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            return resp.read().decode("utf-8")
+    except HTTPError as e:
+        if e.code == 404:
+            raise Exception(f"PDB ID '{pdb_id}' not found on RCSB.")
+        raise Exception(f"Failed to fetch PDB '{pdb_id}': HTTP {e.code}")
+
+
+def _find_binding_center(pdb_text: str) -> tuple[float, float, float]:
+    """Find binding site center from co-crystallized ligand."""
+    skip = {"HOH", "WAT", "SO4", "PO4", "GOL", "EDO", "PEG", "DMS", "ACT",
+            "CL", "NA", "MG", "ZN", "CA", "K", "FMT", "IOD"}
+    residue_coords = {}
+
+    for line in pdb_text.splitlines():
+        if not line.startswith("HETATM"):
+            continue
+        res_name = line[17:20].strip()
+        if res_name in skip:
+            continue
+        try:
+            x, y, z = float(line[30:38]), float(line[38:46]), float(line[46:54])
+            residue_coords.setdefault(res_name, []).append((x, y, z))
+        except (ValueError, IndexError):
+            continue
+
+    if not residue_coords:
+        # Fallback: use geometric center of protein
+        logger.warning("No ligand found, using protein geometric center")
+        return (0.0, 0.0, 0.0)
+
+    best_res = max(residue_coords, key=lambda r: len(residue_coords[r]))
+    coords = np.array(residue_coords[best_res])
+    center = coords.mean(axis=0)
+    return round(float(center[0]), 3), round(float(center[1]), 3), round(float(center[2]), 3)
+
+
+def _prepare_receptor_pdbqt(pdb_path: str, output_path: str) -> None:
+    """Prepare receptor PDBQT from PDB file."""
+    # Clean PDB (remove HETATM)
+    cleaned_path = pdb_path.replace(".pdb", "_clean.pdb")
+    with open(pdb_path) as f:
+        lines = f.readlines()
+    with open(cleaned_path, "w") as f:
+        for line in lines:
+            if line.startswith(("ATOM", "TER", "END", "MODEL", "ENDMDL", "REMARK", "CRYST1")):
+                f.write(line)
+
+    # Run mk_prepare_receptor
+    mk_script = shutil.which("mk_prepare_receptor.py") or shutil.which("mk_prepare_receptor")
+    if mk_script is None:
+        raise Exception("mk_prepare_receptor not found. Install with: pip install meeko")
+
+    output_basename = output_path.removesuffix(".pdbqt")
+    cmd = [mk_script, "-i", cleaned_path, "-o", output_basename, "-p"]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+
+    if result.returncode != 0:
+        raise Exception(f"Receptor prep failed: {result.stderr[:200]}")
+
+
+# Note: _smiles_to_pdbqt and dock_single_compound moved to docking_worker.py module
+
+
+def _rank_by_activity(ro5_state, protein_info_state=None, num_dock=50):
+    """Rank compounds using AutoDock Vina docking scores."""
+    logger.info("=== STEP 4: Ranking by binding activity (AutoDock Vina) ===")
     if not ro5_state:
-        logger.warning("No compounds provided for activity ranking")
+        logger.warning("No compounds provided for docking")
         return "No compounds to rank. Run Step 3 first.", None, None
 
-    total = len(ro5_state)
-    with_data = [
-        c for c in ro5_state
-        if c.get("activity_value") and c["activity_value"] > 0
-    ]
-    without_data = [
-        c for c in ro5_state
-        if not c.get("activity_value") or c["activity_value"] <= 0
-    ]
-    logger.info(f"Ranking {total} compounds: {len(with_data)} with binding data, {len(without_data)} without")
+    if not protein_info_state:
+        logger.error("No protein info for docking")
+        return "Protein info required for docking. Re-run Step 1.", None, None
 
-    with_data.sort(key=lambda x: x["activity_value"])
-    ranked = with_data + without_data
+    total = len(ro5_state)
+    pdb_id = protein_info_state["pdb_id"]
+
+    # Pre-rank by ChEMBL activity to select top candidates
+    with_activity = [c for c in ro5_state if c.get("activity_value") and c["activity_value"] > 0]
+    without_activity = [c for c in ro5_state if not c.get("activity_value") or c["activity_value"] <= 0]
+
+    with_activity.sort(key=lambda x: x["activity_value"])
+    pre_ranked = with_activity + without_activity
+
+    # Dock top N compounds
+    num_dock = min(num_dock, len(pre_ranked))
+    to_dock = pre_ranked[:num_dock]
+
+    # Calculate optimal workers based on available resources
+    num_workers = min(_calculate_optimal_workers(), num_dock)
+    est_time = (num_dock / num_workers) * 0.5  # ~30s per compound per worker
+    logger.info(f"Docking {num_dock} compounds in parallel ({num_workers} workers) - ETA: {est_time:.1f}min")
+
+    try:
+        # Fetch PDB and prepare receptor (once)
+        pdb_text = _fetch_pdb_file(pdb_id)
+        center = _find_binding_center(pdb_text)
+        logger.info(f"Binding center: {center}")
+
+        # Prepare receptor in a persistent temp directory
+        tmpdir = tempfile.mkdtemp()
+        try:
+            pdb_path = os.path.join(tmpdir, "receptor.pdb")
+            with open(pdb_path, "w") as f:
+                f.write(pdb_text)
+
+            receptor_pdbqt = os.path.join(tmpdir, "receptor.pdbqt")
+            _prepare_receptor_pdbqt(pdb_path, receptor_pdbqt)
+            logger.info("Receptor prepared, starting parallel docking...")
+
+            # Prepare arguments for parallel docking
+            dock_args = [
+                (i, to_dock[i]["smiles"], receptor_pdbqt, center)
+                for i in range(num_dock)
+            ]
+
+            # Run docking in parallel using isolated worker module
+            completed = 0
+            failed = 0
+            with ProcessPoolExecutor(max_workers=num_workers) as executor:
+                futures = {executor.submit(dock_single_compound, arg): arg[0] for arg in dock_args}
+
+                for future in as_completed(futures):
+                    idx, affinity = future.result()
+                    to_dock[idx]["vina_affinity"] = round(affinity, 2)
+                    to_dock[idx]["docked"] = True
+
+                    if affinity == float('inf'):
+                        failed += 1
+
+                    completed += 1
+                    # Progress every 5 compounds or at completion
+                    if completed % 5 == 0 or completed == num_dock:
+                        pct = (completed / num_dock) * 100
+                        logger.info(f"Docking progress: {completed}/{num_dock} ({pct:.0f}%) - {failed} failed")
+                        print(f"[DOCKING PROGRESS] {completed}/{num_dock} ({pct:.0f}%) - {failed} failed", flush=True)
+
+            logger.info(f"Parallel docking complete: {num_dock} compounds ({failed} failed)")
+
+        finally:
+            # Clean up temp directory
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    except Exception as e:
+        logger.error(f"Docking failed: {e}")
+        return f"Docking failed: {e}", None, None
+
+    # Mark undocked compounds
+    for compound in pre_ranked[num_dock:]:
+        compound["vina_affinity"] = None
+        compound["docked"] = False
+
+    # Sort by Vina affinity (lower = better binding)
+    docked = [c for c in pre_ranked if c.get("docked")]
+    undocked = [c for c in pre_ranked if not c.get("docked")]
+
+    docked.sort(key=lambda x: x["vina_affinity"])
+    ranked = docked + undocked
 
     for i, c in enumerate(ranked):
         c["binding_rank"] = i + 1
@@ -630,23 +832,25 @@ def _rank_by_activity(ro5_state):
         rows.append({
             "Rank": c["binding_rank"],
             "Name": c["name"][:25],
-            "Assay": c.get("activity_type", "N/A"),
-            "Value": (
-                f"{c['activity_value']:.1f}"
+            "Vina (kcal/mol)": (
+                f"{c['vina_affinity']:.2f}"
+                if c.get("vina_affinity") and c["vina_affinity"] != float('inf')
+                else "Not docked"
+            ),
+            "ChEMBL Activity": (
+                f"{c['activity_value']:.0f} {c.get('activity_units', '')}"
                 if c.get("activity_value")
                 else "N/A"
             ),
-            "Units": c.get("activity_units", ""),
             "MW": c.get("mw", ""),
             "LogP": c.get("logp", ""),
         })
 
-    status = (
-        f"Ranked {len(ranked)} compounds by binding activity. "
-        f"{len(with_data)} have experimental data."
-    )
+    docked_count = len([c for c in ranked if c.get("docked")])
+    status = f"Docked {docked_count} of {len(ranked)} compounds with AutoDock Vina"
+
     df = pd.DataFrame(rows) if rows else None
-    logger.info(f"=== STEP 4 COMPLETE: {len(ranked)} compounds ranked ===")
+    logger.info(f"=== STEP 4 COMPLETE: {docked_count} docked, {len(ranked)} total ===")
     return status, ranked, df
 
 
@@ -979,13 +1183,23 @@ def create_tab():
         # STEP 4 — Binding Activity Ranking
         # ────────────────────────────────────────────────────────
         gr.Markdown(
-            "---\n## Step 4: Binding Activity Ranking\n"
-            "Ranks compounds by experimental binding data (IC50, Ki) "
-            "from ChEMBL. Lower values = stronger binding."
+            "---\n## Step 4: Molecular Docking (AutoDock Vina)\n"
+            "Docks compounds into the protein structure using AutoDock Vina. "
+            "Lower affinity (more negative) = stronger binding.\n\n"
+            "_Time: ~30-60 seconds per compound_"
         )
-        rank_btn = gr.Button(
-            "Rank by Binding Activity", variant="primary", size="lg"
-        )
+        with gr.Row():
+            num_dock_input = gr.Number(
+                label="Number of compounds to dock",
+                value=50,
+                minimum=1,
+                maximum=500,
+                step=1,
+                scale=1,
+            )
+            rank_btn = gr.Button(
+                "Run Vina Docking", variant="primary", size="lg", scale=2
+            )
         rank_status = gr.Textbox(
             label="Status", interactive=False, lines=1
         )
@@ -1115,7 +1329,7 @@ def create_tab():
         # Step 4
         rank_btn.click(
             _rank_by_activity,
-            inputs=[ro5_state],
+            inputs=[ro5_state, protein_state, num_dock_input],
             outputs=[rank_status, ranked_state, rank_table],
         )
 
@@ -1133,7 +1347,7 @@ def create_tab():
             outputs=[ro5_status, ro5_state, ro5_table],
         ).then(
             _rank_by_activity,
-            inputs=[ro5_state],
+            inputs=[ro5_state, protein_state, num_dock_input],
             outputs=[rank_status, ranked_state, rank_table],
         ).then(
             _apply_adme_filter,

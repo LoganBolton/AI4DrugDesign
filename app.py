@@ -31,4 +31,5 @@ with gr.Blocks() as demo:
     integrated_pipeline.create_tab()
     chat.create_tab()
 
-demo.launch()
+if __name__ == "__main__":
+    demo.launch()

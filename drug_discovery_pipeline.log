@@ -262,3 +262,243 @@
 2026-03-17 17:16:56,689 - tabs.integrated_pipeline - INFO - === STEP 4: Ranking by binding activity ===
 2026-03-17 17:16:56,689 - tabs.integrated_pipeline - INFO - Ranking 606 compounds: 601 with binding data, 5 without
 2026-03-17 17:16:56,692 - tabs.integrated_pipeline - INFO - === STEP 4 COMPLETE: 606 compounds ranked ===
+2026-03-17 17:24:14,234 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:24:14,234 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:24:14,249 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:24:14,307 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7860/ "HTTP/1.1 200 OK"
+2026-03-17 17:24:14,378 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:24:14,527 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:24:14,528 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:24:23,535 - tabs.integrated_pipeline - INFO - === STEP 1: Analyzing protein 6LU7 ===
+2026-03-17 17:24:23,535 - tabs.integrated_pipeline - INFO - Fetching protein info for PDB ID: 6LU7
+2026-03-17 17:24:23,873 - tabs.integrated_pipeline - INFO - Found 0 ligand(s) in 6LU7
+2026-03-17 17:24:24,652 - tabs.integrated_pipeline - INFO - Found 0 binding site(s) in 6LU7
+2026-03-17 17:24:24,652 - tabs.integrated_pipeline - INFO - Successfully fetched complete protein info for 6LU7
+2026-03-17 17:24:25,167 - tabs.integrated_pipeline - INFO - UniProt ID for 6LU7: P0DTD1
+2026-03-17 17:24:25,199 - tabs.integrated_pipeline - INFO - Requesting AI analysis for 6LU7
+2026-03-17 17:25:03,288 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-17 17:25:03,325 - tabs.integrated_pipeline - INFO - AI analysis completed for 6LU7
+2026-03-17 17:25:03,325 - tabs.integrated_pipeline - INFO - === STEP 1 COMPLETE: 6LU7 analyzed successfully ===
+2026-03-17 17:25:03,349 - tabs.integrated_pipeline - INFO - === STEP 2: Fetching compounds ===
+2026-03-17 17:25:03,844 - tabs.integrated_pipeline - INFO - Fetching compounds for 6LU7 (UniProt: P0DTD1)
+2026-03-17 17:25:03,844 - tabs.integrated_pipeline - INFO - Looking up ChEMBL target for UniProt P0DTD1
+2026-03-17 17:25:05,108 - tabs.integrated_pipeline - INFO - Found ChEMBL target: CHEMBL4523582
+2026-03-17 17:25:05,109 - tabs.integrated_pipeline - INFO - Fetching activities for ChEMBL target CHEMBL4523582
+2026-03-17 17:25:16,297 - tabs.integrated_pipeline - INFO - Fetched 1212 compounds from ChEMBL activities
+2026-03-17 17:25:16,297 - tabs.integrated_pipeline - INFO - Fetching co-crystallized ligands from PDB 6LU7
+2026-03-17 17:25:16,407 - tabs.integrated_pipeline - INFO - Added 1212 PDB ligands
+2026-03-17 17:25:16,408 - tabs.integrated_pipeline - INFO - === STEP 2 COMPLETE: 1212 compounds discovered ===
+2026-03-17 17:25:23,231 - tabs.integrated_pipeline - INFO - === STEP 3: Applying Rule of 5 filter ===
+2026-03-17 17:25:23,231 - tabs.integrated_pipeline - INFO - Filtering 1212 compounds by Rule of 5
+2026-03-17 17:25:23,652 - tabs.integrated_pipeline - INFO - Rule of 5: Using ≤0 violations threshold
+2026-03-17 17:25:23,653 - tabs.integrated_pipeline - INFO - Rule of 5: Tightened to top 606 compounds
+2026-03-17 17:25:23,653 - tabs.integrated_pipeline - INFO - === STEP 3 COMPLETE: 606/1212 compounds passed Rule of 5 ===
+2026-03-17 17:25:30,935 - tabs.integrated_pipeline - INFO - === STEP 4: Ranking by binding activity (AutoDock Vina) ===
+2026-03-17 17:25:30,936 - tabs.integrated_pipeline - INFO - Docking top 50 of 606 compounds (this will take ~25-50min)
+2026-03-17 17:25:31,424 - tabs.integrated_pipeline - INFO - Binding center: (-11.575, 14.612, 65.164)
+2026-03-17 17:25:33,942 - tabs.integrated_pipeline - INFO - Receptor prepared, starting docking...
+2026-03-17 17:25:33,942 - tabs.integrated_pipeline - INFO - Docking progress: 0/50
+2026-03-17 17:26:19,519 - tabs.integrated_pipeline - INFO - Docking progress: 10/50
+2026-03-17 17:27:10,630 - tabs.integrated_pipeline - INFO - Docking progress: 20/50
+2026-03-17 17:27:41,013 - tabs.integrated_pipeline - INFO - Docking progress: 30/50
+2026-03-17 17:27:59,497 - tabs.integrated_pipeline - WARNING - Docking failed for O=C(NCc1ccco1)C1CN(C(=O)c2cc(=: RDKit molecule has 2 fragments. Must have 1.
+2026-03-17 17:28:22,400 - tabs.integrated_pipeline - INFO - Docking progress: 40/50
+2026-03-17 17:28:51,905 - tabs.integrated_pipeline - INFO - Docking complete: 50 compounds
+2026-03-17 17:28:51,908 - tabs.integrated_pipeline - INFO - === STEP 4 COMPLETE: 50 docked, 606 total ===
+2026-03-17 17:33:25,695 - tabs.integrated_pipeline - INFO - === STEP 5: Applying ADME filter ===
+2026-03-17 17:33:25,695 - tabs.integrated_pipeline - INFO - Filtering 606 compounds by ADME criteria
+2026-03-17 17:33:25,820 - tabs.integrated_pipeline - INFO - === STEP 5 COMPLETE: 585/606 compounds passed ADME filter ===
+2026-03-17 17:35:44,260 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:35:44,299 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:35:44,300 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:35:44,355 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7860/ "HTTP/1.1 200 OK"
+2026-03-17 17:35:44,396 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:35:44,605 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:35:44,618 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:37:10,120 - tabs.integrated_pipeline - INFO - === STEP 1: Analyzing protein 6LU7 ===
+2026-03-17 17:37:10,124 - tabs.integrated_pipeline - INFO - Fetching protein info for PDB ID: 6LU7
+2026-03-17 17:37:10,499 - tabs.integrated_pipeline - INFO - Found 0 ligand(s) in 6LU7
+2026-03-17 17:37:11,143 - tabs.integrated_pipeline - INFO - Found 0 binding site(s) in 6LU7
+2026-03-17 17:37:11,143 - tabs.integrated_pipeline - INFO - Successfully fetched complete protein info for 6LU7
+2026-03-17 17:37:11,734 - tabs.integrated_pipeline - INFO - UniProt ID for 6LU7: P0DTD1
+2026-03-17 17:37:11,766 - tabs.integrated_pipeline - INFO - Requesting AI analysis for 6LU7
+2026-03-17 17:37:50,313 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-17 17:37:50,325 - tabs.integrated_pipeline - INFO - AI analysis completed for 6LU7
+2026-03-17 17:37:50,325 - tabs.integrated_pipeline - INFO - === STEP 1 COMPLETE: 6LU7 analyzed successfully ===
+2026-03-17 17:37:50,342 - tabs.integrated_pipeline - INFO - === STEP 2: Fetching compounds ===
+2026-03-17 17:37:50,858 - tabs.integrated_pipeline - INFO - Fetching compounds for 6LU7 (UniProt: P0DTD1)
+2026-03-17 17:37:50,859 - tabs.integrated_pipeline - INFO - Looking up ChEMBL target for UniProt P0DTD1
+2026-03-17 17:37:52,063 - tabs.integrated_pipeline - INFO - Found ChEMBL target: CHEMBL4523582
+2026-03-17 17:37:52,064 - tabs.integrated_pipeline - INFO - Fetching activities for ChEMBL target CHEMBL4523582
+2026-03-17 17:38:03,828 - tabs.integrated_pipeline - INFO - Fetched 1212 compounds from ChEMBL activities
+2026-03-17 17:38:03,828 - tabs.integrated_pipeline - INFO - Fetching co-crystallized ligands from PDB 6LU7
+2026-03-17 17:38:03,939 - tabs.integrated_pipeline - INFO - Added 1212 PDB ligands
+2026-03-17 17:38:03,939 - tabs.integrated_pipeline - INFO - === STEP 2 COMPLETE: 1212 compounds discovered ===
+2026-03-17 17:40:14,543 - tabs.integrated_pipeline - INFO - === STEP 3: Applying Rule of 5 filter ===
+2026-03-17 17:40:14,543 - tabs.integrated_pipeline - INFO - Filtering 1212 compounds by Rule of 5
+2026-03-17 17:40:14,967 - tabs.integrated_pipeline - INFO - Rule of 5: Using ≤0 violations threshold
+2026-03-17 17:40:14,968 - tabs.integrated_pipeline - INFO - Rule of 5: Tightened to top 606 compounds
+2026-03-17 17:40:14,969 - tabs.integrated_pipeline - INFO - === STEP 3 COMPLETE: 606/1212 compounds passed Rule of 5 ===
+2026-03-17 17:40:16,136 - tabs.integrated_pipeline - INFO - === STEP 4: Ranking by binding activity (AutoDock Vina) ===
+2026-03-17 17:40:16,137 - tabs.integrated_pipeline - INFO - psutil not available, using conservative estimate: 12 CPUs → 10 workers
+2026-03-17 17:40:16,137 - tabs.integrated_pipeline - INFO - Docking 50 compounds in parallel (10 workers) - ETA: 2.5min
+2026-03-17 17:40:16,379 - tabs.integrated_pipeline - INFO - Binding center: (-11.575, 14.612, 65.164)
+2026-03-17 17:40:18,845 - tabs.integrated_pipeline - INFO - Receptor prepared, starting parallel docking...
+2026-03-17 17:40:22,434 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,436 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,444 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,449 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,452 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,454 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,454 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,455 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,459 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,468 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,561 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,567 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,575 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,580 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,591 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,593 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,595 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,604 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,632 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7861/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,652 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,658 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,663 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7862/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,700 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7863/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,708 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7864/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,727 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7866/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,733 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7867/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,734 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7861/ "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,753 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,762 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7862/ "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,766 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,770 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,776 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,783 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,788 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7863/ "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,794 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7864/ "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,798 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,802 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,812 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7866/ "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,814 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7867/ "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,824 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,830 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,842 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,849 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,849 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,849 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,860 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,871 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,882 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,905 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,905 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,918 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,943 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,949 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,951 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,957 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,967 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,983 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:22,990 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:40:27,742 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7868/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:40:27,747 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7869/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:40:27,833 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7868/ "HTTP/1.1 200 OK"
+2026-03-17 17:40:27,839 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7869/ "HTTP/1.1 200 OK"
+2026-03-17 17:40:27,893 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:40:27,895 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:40:32,754 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7870/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:40:32,758 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7871/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:40:32,831 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7870/ "HTTP/1.1 200 OK"
+2026-03-17 17:40:32,835 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7871/ "HTTP/1.1 200 OK"
+2026-03-17 17:40:32,980 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:40:32,980 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:47:07,227 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:47:07,275 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:47:07,276 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:47:07,286 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7860/ "HTTP/1.1 200 OK"
+2026-03-17 17:47:07,320 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:47:07,472 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:47:07,482 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:47:26,207 - tabs.integrated_pipeline - INFO - === STEP 1: Analyzing protein 6LU7 ===
+2026-03-17 17:47:26,207 - tabs.integrated_pipeline - INFO - Fetching protein info for PDB ID: 6LU7
+2026-03-17 17:47:26,460 - tabs.integrated_pipeline - INFO - Found 0 ligand(s) in 6LU7
+2026-03-17 17:47:27,121 - tabs.integrated_pipeline - INFO - Found 0 binding site(s) in 6LU7
+2026-03-17 17:47:27,121 - tabs.integrated_pipeline - INFO - Successfully fetched complete protein info for 6LU7
+2026-03-17 17:47:27,548 - tabs.integrated_pipeline - INFO - UniProt ID for 6LU7: P0DTD1
+2026-03-17 17:47:27,575 - tabs.integrated_pipeline - INFO - Requesting AI analysis for 6LU7
+2026-03-17 17:48:14,231 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-17 17:48:14,245 - tabs.integrated_pipeline - INFO - AI analysis completed for 6LU7
+2026-03-17 17:48:14,246 - tabs.integrated_pipeline - INFO - === STEP 1 COMPLETE: 6LU7 analyzed successfully ===
+2026-03-17 17:48:14,263 - tabs.integrated_pipeline - INFO - === STEP 2: Fetching compounds ===
+2026-03-17 17:48:14,752 - tabs.integrated_pipeline - INFO - Fetching compounds for 6LU7 (UniProt: P0DTD1)
+2026-03-17 17:48:14,752 - tabs.integrated_pipeline - INFO - Looking up ChEMBL target for UniProt P0DTD1
+2026-03-17 17:48:16,411 - tabs.integrated_pipeline - INFO - Found ChEMBL target: CHEMBL4523582
+2026-03-17 17:48:16,411 - tabs.integrated_pipeline - INFO - Fetching activities for ChEMBL target CHEMBL4523582
+2026-03-17 17:48:27,406 - tabs.integrated_pipeline - INFO - Fetched 1212 compounds from ChEMBL activities
+2026-03-17 17:48:27,407 - tabs.integrated_pipeline - INFO - Fetching co-crystallized ligands from PDB 6LU7
+2026-03-17 17:48:27,598 - tabs.integrated_pipeline - INFO - Added 1212 PDB ligands
+2026-03-17 17:48:27,599 - tabs.integrated_pipeline - INFO - === STEP 2 COMPLETE: 1212 compounds discovered ===
+2026-03-17 17:48:42,130 - tabs.integrated_pipeline - INFO - === STEP 3: Applying Rule of 5 filter ===
+2026-03-17 17:48:42,131 - tabs.integrated_pipeline - INFO - Filtering 1212 compounds by Rule of 5
+2026-03-17 17:48:42,563 - tabs.integrated_pipeline - INFO - Rule of 5: Using ≤0 violations threshold
+2026-03-17 17:48:42,563 - tabs.integrated_pipeline - INFO - Rule of 5: Tightened to top 606 compounds
+2026-03-17 17:48:42,564 - tabs.integrated_pipeline - INFO - === STEP 3 COMPLETE: 606/1212 compounds passed Rule of 5 ===
+2026-03-17 17:48:46,229 - tabs.integrated_pipeline - INFO - === STEP 4: Ranking by binding activity (AutoDock Vina) ===
+2026-03-17 17:48:46,230 - tabs.integrated_pipeline - INFO - psutil not available, using conservative estimate: 12 CPUs → 10 workers
+2026-03-17 17:48:46,230 - tabs.integrated_pipeline - INFO - Docking 50 compounds in parallel (10 workers) - ETA: 2.5min
+2026-03-17 17:48:46,451 - tabs.integrated_pipeline - INFO - Binding center: (-11.575, 14.612, 65.164)
+2026-03-17 17:48:48,830 - tabs.integrated_pipeline - INFO - Receptor prepared, starting parallel docking...
+2026-03-17 17:48:52,259 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,262 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,264 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,265 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,266 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,266 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,268 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,279 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,283 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,285 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,290 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,302 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,305 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,315 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,314 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,321 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,326 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,336 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,361 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,385 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,563 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,574 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:48:52,585 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:48:53,726 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:48:53,739 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:48:53,776 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:48:53,810 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:48:53,907 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:48:54,640 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:48:54,643 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:49:05,795 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:49:18,527 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:49:18,559 - tabs.integrated_pipeline - INFO - Docking progress: 5/50 (10%) - 0 failed
+2026-03-17 17:49:18,611 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:49:23,305 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:49:23,365 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:49:29,387 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:49:30,026 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:49:30,114 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:49:30,399 - tabs.integrated_pipeline - INFO - Docking progress: 10/50 (20%) - 0 failed
+2026-03-17 17:49:30,521 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:49:54,661 - tabs.integrated_pipeline - INFO - Docking progress: 15/50 (30%) - 0 failed
+2026-03-17 17:50:02,445 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:50:05,086 - tabs.integrated_pipeline - INFO - Docking progress: 20/50 (40%) - 0 failed
+2026-03-17 17:50:12,410 - tabs.integrated_pipeline - INFO - Docking progress: 25/50 (50%) - 0 failed
+2026-03-17 17:50:20,499 - tabs.integrated_pipeline - INFO - Docking progress: 30/50 (60%) - 1 failed
+2026-03-17 17:50:36,536 - tabs.integrated_pipeline - INFO - Docking progress: 35/50 (70%) - 1 failed
+2026-03-17 17:50:55,650 - tabs.integrated_pipeline - INFO - Docking progress: 40/50 (80%) - 1 failed
+2026-03-17 17:51:05,567 - tabs.integrated_pipeline - INFO - Docking progress: 45/50 (90%) - 1 failed
+2026-03-17 17:51:16,165 - tabs.integrated_pipeline - INFO - Docking progress: 50/50 (100%) - 1 failed
+2026-03-17 17:51:16,747 - tabs.integrated_pipeline - INFO - Parallel docking complete: 50 compounds (1 failed)
+2026-03-17 17:51:16,749 - tabs.integrated_pipeline - INFO - === STEP 4 COMPLETE: 50 docked, 606 total ===
