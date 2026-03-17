@@ -502,3 +502,16 @@
 2026-03-17 17:51:16,165 - tabs.integrated_pipeline - INFO - Docking progress: 50/50 (100%) - 1 failed
 2026-03-17 17:51:16,747 - tabs.integrated_pipeline - INFO - Parallel docking complete: 50 compounds (1 failed)
 2026-03-17 17:51:16,749 - tabs.integrated_pipeline - INFO - === STEP 4 COMPLETE: 50 docked, 606 total ===
+2026-03-17 17:53:14,225 - tabs.integrated_pipeline - INFO - === STEP 5: Applying ADME filter ===
+2026-03-17 17:53:14,226 - tabs.integrated_pipeline - INFO - Filtering 606 compounds by ADME criteria
+2026-03-17 17:53:14,335 - tabs.integrated_pipeline - INFO - === STEP 5 COMPLETE: 585/606 compounds passed ADME filter ===
+2026-03-17 17:53:35,982 - tabs.integrated_pipeline - INFO - === STEP 5: Applying ADME filter ===
+2026-03-17 17:53:35,982 - tabs.integrated_pipeline - INFO - Filtering 606 compounds by ADME criteria
+2026-03-17 17:53:36,102 - tabs.integrated_pipeline - INFO - === STEP 5 COMPLETE: 585/606 compounds passed ADME filter ===
+2026-03-17 17:55:34,708 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:55:34,715 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:55:34,789 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:55:34,854 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7860/ "HTTP/1.1 200 OK"
+2026-03-17 17:55:34,891 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:55:35,018 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:55:35,021 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"

@@ -812,17 +812,15 @@ def _rank_by_activity(ro5_state, protein_info_state=None, num_dock=50):
         logger.error(f"Docking failed: {e}")
         return f"Docking failed: {e}", None, None
 
-    # Mark undocked compounds
-    for compound in pre_ranked[num_dock:]:
-        compound["vina_affinity"] = None
-        compound["docked"] = False
+    # Keep ONLY successfully docked compounds (discard undocked and failed)
+    docked = [
+        c for c in pre_ranked
+        if c.get("docked") and c.get("vina_affinity") != float('inf')
+    ]
 
     # Sort by Vina affinity (lower = better binding)
-    docked = [c for c in pre_ranked if c.get("docked")]
-    undocked = [c for c in pre_ranked if not c.get("docked")]
-
     docked.sort(key=lambda x: x["vina_affinity"])
-    ranked = docked + undocked
+    ranked = docked  # Only docked compounds - no undocked!
 
     for i, c in enumerate(ranked):
         c["binding_rank"] = i + 1
@@ -846,11 +844,14 @@ def _rank_by_activity(ro5_state, protein_info_state=None, num_dock=50):
             "LogP": c.get("logp", ""),
         })
 
-    docked_count = len([c for c in ranked if c.get("docked")])
-    status = f"Docked {docked_count} of {len(ranked)} compounds with AutoDock Vina"
+    successful_docks = len(ranked)
+    failed_docks = num_dock - successful_docks
+    status = f"Successfully docked {successful_docks}/{num_dock} compounds with AutoDock Vina"
+    if failed_docks > 0:
+        status += f" ({failed_docks} failed and discarded)"
 
     df = pd.DataFrame(rows) if rows else None
-    logger.info(f"=== STEP 4 COMPLETE: {docked_count} docked, {len(ranked)} total ===")
+    logger.info(f"=== STEP 4 COMPLETE: {successful_docks} successful, {failed_docks} failed ===")
     return status, ranked, df
 
 
@@ -858,7 +859,7 @@ def _rank_by_activity(ro5_state, protein_info_state=None, num_dock=50):
 
 
 def _apply_adme_filter(docked_state):
-    """Filter by ADME criteria using RDKit descriptors."""
+    """Filter by ADME criteria using RDKit descriptors with adaptive thresholds."""
     logger.info("=== STEP 5: Applying ADME filter ===")
     if not docked_state:
         logger.warning("No compounds provided for ADME filter")
@@ -866,8 +867,9 @@ def _apply_adme_filter(docked_state):
 
     total = len(docked_state)
     logger.info(f"Filtering {total} compounds by ADME criteria")
-    passed = []
 
+    # Calculate ADME properties for all compounds
+    valid_compounds = []
     for c in docked_state:
         mol = Chem.MolFromSmiles(c["smiles"])
         if mol is None:
@@ -891,32 +893,72 @@ def _apply_adme_filter(docked_state):
         c["tpsa"] = round(tpsa, 1)
         c["rot_bonds"] = rot_bonds
         c["adme_score"] = score
-        c["adme_pass"] = score >= 5
 
-        if c["adme_pass"]:
-            passed.append(c)
+        valid_compounds.append(c)
 
+    # Adaptive filtering strategy
+    target_min = 50  # Minimum compounds to keep
+    target_ratio = 0.5  # Aim for 50% of input
+
+    # Try progressively relaxed thresholds (6/6 down to 0/6)
+    for min_score in [6, 5, 4, 3, 2, 1, 0]:
+        candidates = [c for c in valid_compounds if c["adme_score"] >= min_score]
+
+        # If we have enough compounds, use this threshold
+        if len(candidates) >= target_min:
+            passed = candidates
+            logger.info(f"ADME: Using >={min_score}/6 criteria threshold")
+            break
+    else:
+        # Fallback: take all valid compounds
+        passed = valid_compounds
+        logger.warning(f"ADME: Using all {len(passed)} compounds")
+
+    # If we have way more than target, tighten by taking top by ADME score + binding
+    target_count = max(int(total * target_ratio), target_min)
+    if len(passed) > target_count:
+        # Sort by ADME score (higher better), then by Vina affinity (lower better)
+        passed_sorted = sorted(
+            passed,
+            key=lambda x: (
+                -x["adme_score"],  # Higher ADME score is better
+                x.get("vina_affinity", float('inf'))  # Lower affinity is better
+            )
+        )
+        passed = passed_sorted[:target_count]
+        logger.info(f"ADME: Tightened to top {len(passed)} compounds")
+
+    # Mark pass/fail
+    for c in passed:
+        c["adme_pass"] = True
+
+    # Build output table
     rows = []
     for c in passed:
         rows.append({
             "Rank": c.get("binding_rank", ""),
             "Name": c["name"][:25],
             "ADME": f"{c['adme_score']}/6",
+            "Vina": (
+                f"{c.get('vina_affinity', 'N/A'):.2f}"
+                if c.get("vina_affinity") and c["vina_affinity"] != float('inf')
+                else "N/A"
+            ),
             "TPSA": c["tpsa"],
             "RotBonds": c["rot_bonds"],
             "MW": c.get("mw", ""),
             "LogP": c.get("logp", ""),
-            "Activity": (
-                f"{c['activity_value']:.0f}"
-                if c.get("activity_value")
-                else "N/A"
-            ),
         })
 
+    # Calculate status message
+    pct = (len(passed) / total * 100) if total > 0 else 0
+    min_score = min([c["adme_score"] for c in passed]) if passed else 0
+    max_score = max([c["adme_score"] for c in passed]) if passed else 0
     status = (
-        f"ADME: {len(passed)} of {total} compounds pass "
-        "(\u22655 of 6 criteria)"
+        f"ADME: {len(passed)} of {total} compounds ({pct:.0f}%) — "
+        f"scores {min_score}-{max_score}/6"
     )
+
     df = pd.DataFrame(rows) if rows else None
     logger.info(f"=== STEP 5 COMPLETE: {len(passed)}/{total} compounds passed ADME filter ===")
     return status, passed, df
@@ -1219,7 +1261,9 @@ def create_tab():
             "Filters by ADME (Absorption, Distribution, Metabolism, "
             "Excretion) criteria:\n"
             "TPSA < 140, Rotatable Bonds \u2264 10, MW 150-500, "
-            "LogP -0.4 to 5.6, HBD \u2264 5, HBA \u2264 10."
+            "LogP -0.4 to 5.6, HBD \u2264 5, HBA \u2264 10.\n\n"
+            "_Adaptive filtering: Keeps minimum 50 compounds, "
+            "aims for ~50% of input._"
         )
         adme_btn = gr.Button(
             "Apply ADME Filter", variant="primary", size="lg"
