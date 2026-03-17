@@ -191,13 +191,23 @@ def _get_uniprot_from_pdb(pdb_id: str) -> str | None:
     return None
 
 
+def _update_protein_status():
+    """Show status when protein analysis starts."""
+    return "**Protein:** 🔄 Analyzing structure from RCSB PDB..."
+
+
 def _analyze_protein(pdb_id: str):
     """Step 1 handler: fetch info, build display text, 3D viewer."""
     logger.info(f"=== STEP 1: Analyzing protein {pdb_id} ===")
     pdb_id = (pdb_id or "").strip().upper()
     if not pdb_id:
         logger.warning("Empty PDB ID provided")
-        return "Please enter a PDB ID.", None, _VIEWER_PLACEHOLDER
+        return (
+            "**Protein:** ❌ Please enter a PDB ID",
+            "Please enter a PDB ID.",
+            None,
+            _VIEWER_PLACEHOLDER,
+        )
 
     try:
         info = _fetch_protein_info(pdb_id)
@@ -205,11 +215,26 @@ def _analyze_protein(pdb_id: str):
         code = exc.response.status_code if exc.response is not None else "?"
         logger.error(f"HTTP error fetching {pdb_id}: {code}")
         if code == 404:
-            return f"PDB ID '{pdb_id}' not found.", None, _VIEWER_PLACEHOLDER
-        return f"Error fetching PDB data (HTTP {code}).", None, _VIEWER_PLACEHOLDER
+            return (
+                f"**Protein:** ❌ PDB ID '{pdb_id}' not found",
+                f"PDB ID '{pdb_id}' not found.",
+                None,
+                _VIEWER_PLACEHOLDER,
+            )
+        return (
+            f"**Protein:** ❌ Error fetching data (HTTP {code})",
+            f"Error fetching PDB data (HTTP {code}).",
+            None,
+            _VIEWER_PLACEHOLDER,
+        )
     except Exception as exc:
         logger.error(f"Error analyzing protein {pdb_id}: {exc}")
-        return f"Error: {exc}", None, _VIEWER_PLACEHOLDER
+        return (
+            f"**Protein:** ❌ Error: {exc}",
+            f"Error: {exc}",
+            None,
+            _VIEWER_PLACEHOLDER,
+        )
 
     info["uniprot_id"] = _get_uniprot_from_pdb(pdb_id)
     logger.info(f"UniProt ID for {pdb_id}: {info['uniprot_id']}")
@@ -266,21 +291,30 @@ def _analyze_protein(pdb_id: str):
 
     viewer = _build_3d_viewer_html(pdb_id)
     logger.info(f"=== STEP 1 COMPLETE: {pdb_id} analyzed successfully ===")
-    return text, info, viewer
+
+    status = f"**Protein:** ✅ Analysis complete for {pdb_id}"
+    return status, text, info, viewer
 
 
 # ── Step 2 — Compound Discovery ────────────────────────────────────────
 
 
-def _fetch_compounds(protein_info):
+def _update_compound_status():
+    """Show status when compound fetching starts."""
+    return "**Compounds:** 🔄 Fetching from ChEMBL (30-60s)..."
+
+
+def _fetch_compounds(pdb_id):
     """Fetch bioactive compounds from ChEMBL for the protein target."""
     logger.info("=== STEP 2: Fetching compounds ===")
-    if not protein_info:
-        logger.warning("No protein info provided")
-        return "Please analyze a protein first (Step 1).", None, None
 
-    pdb_id = protein_info["pdb_id"]
-    uniprot_id = protein_info.get("uniprot_id")
+    pdb_id = (pdb_id or "").strip().upper()
+    if not pdb_id:
+        logger.warning("No PDB ID provided")
+        return "**Compounds:** ❌ Enter a PDB ID first", None, None
+
+    # Get UniProt mapping for this protein
+    uniprot_id = _get_uniprot_from_pdb(pdb_id)
     logger.info(f"Fetching compounds for {pdb_id} (UniProt: {uniprot_id})")
 
     compounds: list[dict] = []
@@ -375,7 +409,35 @@ def _fetch_compounds(protein_info):
 
     # --- Also grab co-crystallized ligands from the PDB ---
     logger.info(f"Fetching co-crystallized ligands from PDB {pdb_id}")
-    for lig in protein_info.get("ligands", []):
+
+    # Fetch ligands from PDB structure
+    pdb_ligands = []
+    try:
+        base = "https://data.rcsb.org/rest/v1/core"
+        r = requests.get(f"{base}/entry/{pdb_id}", timeout=15)
+        if r.ok:
+            entry = r.json()
+            non_poly_ids = (
+                entry.get("rcsb_entry_container_identifiers", {})
+                .get("non_polymer_entity_ids") or []
+            )
+            for eid in non_poly_ids[:10]:
+                try:
+                    er = requests.get(
+                        f"{base}/nonpolymer_entity/{pdb_id}/{eid}", timeout=10
+                    )
+                    if er.ok:
+                        d = er.json().get("pdbx_entity_nonpoly", {})
+                        comp_id = d.get("comp_id", "")
+                        name = d.get("name", comp_id)
+                        if comp_id and comp_id not in _SKIP_LIGANDS:
+                            pdb_ligands.append({"comp_id": comp_id, "name": name})
+                except Exception as e:
+                    logger.debug(f"Error fetching ligand entity {eid}: {e}")
+    except Exception as e:
+        logger.warning(f"Error fetching PDB ligands: {e}")
+
+    for lig in pdb_ligands:
         try:
             r = requests.get(
                 f"https://data.rcsb.org/rest/v1/core/chemcomp/{lig['comp_id']}",
@@ -405,8 +467,7 @@ def _fetch_compounds(protein_info):
     if not compounds:
         logger.warning(f"No compounds found for {pdb_id}")
         return (
-            f"No compounds found for {pdb_id}. "
-            "Try a different PDB ID with known drug targets.",
+            f"**Compounds:** ⚠️ None found for {pdb_id}",
             None,
             None,
         )
@@ -423,9 +484,9 @@ def _fetch_compounds(protein_info):
             "Units": c["activity_units"],
         })
 
-    status = f"Found {len(compounds)} compounds targeting {pdb_id}"
+    status = f"**Compounds:** ✅ Found {len(compounds)} for {pdb_id}"
     if target_chembl_id:
-        status += f" (ChEMBL: {target_chembl_id})"
+        status += f" ({target_chembl_id})"
 
     logger.info(f"=== STEP 2 COMPLETE: {len(compounds)} compounds discovered ===")
     return status, compounds, pd.DataFrame(rows)
@@ -777,9 +838,6 @@ def create_tab():
     with gr.Tab("Drug Discovery Pipeline"):
         gr.Markdown(
             "# Integrated Drug Discovery Pipeline\n"
-            "**Workflow:** Input Protein \u2192 Find Compounds \u2192 "
-            "Rule of 5 \u2192 Binding Scores \u2192 ADME \u2192 "
-            "Select & Analyze"
         )
 
         # --- State ---
@@ -791,62 +849,65 @@ def create_tab():
         selected_state = gr.State(None)
 
         # ────────────────────────────────────────────────────────
-        # STEP 1 — Protein
+        # STEP 1 & 2 — Protein Analysis & Compound Discovery
         # ────────────────────────────────────────────────────────
-        gr.Markdown("---\n## Step 1: Protein Input & Analysis")
-        with gr.Row():
-            with gr.Column(scale=1):
-                pdb_input = gr.Textbox(
-                    label="PDB ID",
-                    placeholder="e.g., 6LU7",
-                    lines=1,
-                )
-                analyze_btn = gr.Button(
-                    "Analyze Protein", variant="primary", size="lg"
-                )
-                protein_text = gr.Textbox(
-                    label="Protein Information & AI Analysis",
-                    interactive=False,
-                    lines=20,
-                )
-                explain_protein_btn = gr.Button(
-                    "AI: Deep Dive on This Protein", variant="secondary"
-                )
-                protein_deep_dive = gr.Textbox(
-                    label="Protein Deep Dive",
-                    interactive=False,
-                    lines=15,
-                )
-            with gr.Column(scale=1):
-                viewer_html = gr.HTML(value=_VIEWER_PLACEHOLDER)
+        gr.Markdown(
+            "---\n## Step 1 & 2: Protein Analysis & Compound Discovery\n"
+            "_Both run in parallel as soon as you enter the PDB ID_"
+        )
+
+        pdb_input = gr.Textbox(
+            label="PDB ID",
+            placeholder="e.g., 6LU7",
+            lines=1,
+        )
+        analyze_btn = gr.Button(
+            "Analyze Protein & Discover Compounds",
+            variant="primary",
+            size="lg",
+        )
 
         gr.Examples(
             examples=[["6LU7"], ["1IEP"], ["2HYY"], ["1AZ5"]],
             inputs=pdb_input,
         )
 
-        # ────────────────────────────────────────────────────────
-        # STEP 2 — Compound Discovery
-        # ────────────────────────────────────────────────────────
-        gr.Markdown(
-            "---\n## Step 2: Compound Discovery\n"
-            "Fetches bioactive compounds from the ChEMBL database "
-            "that target this protein.\n\n"
-            "_Note: This may take 30-60 seconds as ChEMBL queries "
-            "can be slow._"
-        )
-        fetch_btn = gr.Button(
-            "Find Candidate Compounds", variant="primary", size="lg"
-        )
-        compounds_status = gr.Textbox(
-            label="Status", interactive=False, lines=1
-        )
-        compounds_table = gr.Dataframe(
-            label="Discovered Compounds",
-            interactive=False,
-            wrap=True,
-            max_height=300,
-        )
+        # Status indicators
+        with gr.Row():
+            protein_status = gr.Markdown(
+                value="**Protein:** Ready to analyze",
+                visible=True,
+            )
+            compounds_status = gr.Markdown(
+                value="**Compounds:** Ready to fetch",
+                visible=True,
+            )
+
+        # Protein details accordion
+        with gr.Accordion("Protein Details & 3D Structure", open=False):
+            with gr.Row():
+                with gr.Column(scale=1):
+                    protein_text = gr.Textbox(
+                        label="Protein Information & AI Analysis",
+                        interactive=False,
+                        lines=20,
+                    )
+                with gr.Column(scale=1):
+                    viewer_html = gr.HTML(value=_VIEWER_PLACEHOLDER)
+
+        # Discovered compounds accordion
+        with gr.Accordion("Discovered Compounds", open=False):
+            fetch_btn = gr.Button(
+                "Re-fetch Compounds",
+                variant="secondary",
+                size="sm",
+            )
+            compounds_table = gr.Dataframe(
+                label="Compounds from ChEMBL",
+                interactive=False,
+                wrap=True,
+                max_height=300,
+            )
 
         # ────────────────────────────────────────────────────────
         # STEP 3 — Rule of 5
@@ -863,12 +924,13 @@ def create_tab():
         ro5_status = gr.Textbox(
             label="Status", interactive=False, lines=1
         )
-        ro5_table = gr.Dataframe(
-            label="Compounds Passing Rule of 5",
-            interactive=False,
-            wrap=True,
-            max_height=300,
-        )
+        with gr.Accordion("Rule of 5 Results", open=False):
+            ro5_table = gr.Dataframe(
+                label="Compounds Passing Rule of 5",
+                interactive=False,
+                wrap=True,
+                max_height=300,
+            )
 
         # ────────────────────────────────────────────────────────
         # STEP 4 — Binding Activity Ranking
@@ -884,12 +946,13 @@ def create_tab():
         rank_status = gr.Textbox(
             label="Status", interactive=False, lines=1
         )
-        rank_table = gr.Dataframe(
-            label="Compounds Ranked by Binding",
-            interactive=False,
-            wrap=True,
-            max_height=300,
-        )
+        with gr.Accordion("Ranked Compounds", open=False):
+            rank_table = gr.Dataframe(
+                label="Compounds Ranked by Binding",
+                interactive=False,
+                wrap=True,
+                max_height=300,
+            )
 
         # ────────────────────────────────────────────────────────
         # STEP 5 — ADME
@@ -907,21 +970,25 @@ def create_tab():
         adme_status = gr.Textbox(
             label="Status", interactive=False, lines=1
         )
-        adme_table = gr.Dataframe(
-            label="Final Compounds \u2014 Click a row to see details",
-            interactive=False,
-            wrap=True,
-            max_height=400,
-        )
+        with gr.Accordion("Final Compounds — Click a row to see details", open=True):
+            adme_table = gr.Dataframe(
+                label="Final Filtered Compounds",
+                interactive=False,
+                wrap=True,
+                max_height=400,
+            )
 
         # ────────────────────────────────────────────────────────
-        # Run All Steps at Once
+        # Run Remaining Steps at Once
         # ────────────────────────────────────────────────────────
         gr.Markdown("---")
         run_all_btn = gr.Button(
-            "Run Full Pipeline (Steps 2\u20135)",
+            "Run All Filters (Steps 3\u20135)",
             variant="secondary",
             size="lg",
+        )
+        gr.Markdown(
+            "_Runs Rule of 5 → Binding Ranking → ADME filtering in sequence._"
         )
 
         # ────────────────────────────────────────────────────────
@@ -958,24 +1025,42 @@ def create_tab():
         # Wire events
         # ────────────────────────────────────────────────────────
 
-        # Step 1
+        # Both Step 1 and Step 2 run in parallel when analyze button is clicked
+        # First, show loading status for both
+        analyze_btn.click(
+            _update_protein_status,
+            inputs=None,
+            outputs=[protein_status],
+        )
+        analyze_btn.click(
+            _update_compound_status,
+            inputs=None,
+            outputs=[compounds_status],
+        )
+
+        # Then run the actual analysis
         analyze_btn.click(
             _analyze_protein,
             inputs=[pdb_input],
-            outputs=[protein_text, protein_state, viewer_html],
+            outputs=[protein_status, protein_text, protein_state, viewer_html],
         )
-        explain_protein_btn.click(
-            _ai_explain_protein,
-            inputs=[protein_state],
-            outputs=[protein_deep_dive],
-        )
-
-        # Step 2
-        fetch_btn.click(
+        analyze_btn.click(
             _fetch_compounds,
-            inputs=[protein_state],
+            inputs=[pdb_input],  # Now takes PDB ID directly
             outputs=[compounds_status, all_compounds_state, compounds_table],
         )
+
+        # Optional: manually re-fetch compounds
+        fetch_btn.click(
+            _update_compound_status,
+            inputs=None,
+            outputs=[compounds_status],
+        ).then(
+            _fetch_compounds,
+            inputs=[pdb_input],
+            outputs=[compounds_status, all_compounds_state, compounds_table],
+        )
+
 
         # Step 3
         ro5_btn.click(
@@ -998,12 +1083,8 @@ def create_tab():
             outputs=[adme_status, final_state, adme_table],
         )
 
-        # Run all (Steps 2-5 chained)
+        # Run all filters (Steps 3-5 chained)
         run_all_btn.click(
-            _fetch_compounds,
-            inputs=[protein_state],
-            outputs=[compounds_status, all_compounds_state, compounds_table],
-        ).then(
             _apply_rule_of_5,
             inputs=[all_compounds_state],
             outputs=[ro5_status, ro5_state, ro5_table],
