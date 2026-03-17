@@ -4,7 +4,6 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 from tabs import (
-    chat,
     integrated_pipeline,
 )
 
@@ -29,7 +28,6 @@ def chat_fn(message, history):
 
 with gr.Blocks() as demo:
     integrated_pipeline.create_tab()
-    chat.create_tab()
 
 if __name__ == "__main__":
     demo.launch()
