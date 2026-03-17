@@ -496,7 +496,7 @@ def _fetch_compounds(pdb_id):
 
 
 def _apply_rule_of_5(compounds_state):
-    """Filter by Lipinski Rule of 5."""
+    """Filter by Lipinski Rule of 5 with adaptive thresholds."""
     logger.info("=== STEP 3: Applying Rule of 5 filter ===")
     if not compounds_state:
         logger.warning("No compounds provided for Rule of 5 filter")
@@ -504,11 +504,12 @@ def _apply_rule_of_5(compounds_state):
 
     total = len(compounds_state)
     logger.info(f"Filtering {total} compounds by Rule of 5")
-    passed = []
 
+    # Calculate properties for all compounds
     for c in compounds_state:
         mol = Chem.MolFromSmiles(c["smiles"])
         if mol is None:
+            c["ro5_violations"] = 999  # Mark as invalid
             continue
 
         mw = Descriptors.MolWt(mol)
@@ -528,10 +529,47 @@ def _apply_rule_of_5(compounds_state):
         c["hbd"] = hbd
         c["hba"] = hba
         c["ro5_violations"] = violations
-        c["ro5_pass"] = violations <= 1
 
-        if c["ro5_pass"]:
-            passed.append(c)
+    # Remove invalid compounds
+    valid_compounds = [c for c in compounds_state if c["ro5_violations"] != 999]
+
+    # Adaptive filtering strategy
+    target_min = 100  # Minimum compounds to keep
+    target_ratio = 0.5  # Aim for 50% of input
+
+    # Try progressively relaxed thresholds
+    for max_violations in [0, 1, 2, 3, 4]:
+        candidates = [c for c in valid_compounds if c["ro5_violations"] <= max_violations]
+
+        # If we have enough compounds, use this threshold
+        if len(candidates) >= target_min:
+            passed = candidates
+            logger.info(f"Rule of 5: Using ≤{max_violations} violations threshold")
+            break
+    else:
+        # If even 4 violations doesn't give us enough, just sort by violations
+        passed = sorted(valid_compounds, key=lambda x: x["ro5_violations"])[:max(target_min, len(valid_compounds))]
+        logger.warning(f"Rule of 5: Relaxed to top {len(passed)} compounds by violations")
+
+    # If we have way more than target, optionally tighten
+    target_count = int(total * target_ratio)
+    if len(passed) > max(target_count, target_min) and len(passed) > 150:
+        # Sort by violations first, then by activity value if available
+        passed_sorted = sorted(
+            passed,
+            key=lambda x: (
+                x["ro5_violations"],
+                x.get("activity_value") if x.get("activity_value") is not None else float("inf")
+            )
+        )
+        # Keep between target and 150% of target
+        keep_count = min(len(passed), max(target_count, target_min))
+        passed = passed_sorted[:keep_count]
+        logger.info(f"Rule of 5: Tightened to top {len(passed)} compounds")
+
+    # Mark pass/fail
+    for c in passed:
+        c["ro5_pass"] = True
 
     rows = []
     for c in passed:
@@ -550,7 +588,11 @@ def _apply_rule_of_5(compounds_state):
             "Activity": act,
         })
 
-    status = f"Rule of 5: {len(passed)} of {total} compounds pass (\u22641 violation)"
+    # Calculate status message
+    pct = (len(passed) / total * 100) if total > 0 else 0
+    max_viol = max([c["ro5_violations"] for c in passed]) if passed else 0
+    status = f"Rule of 5: {len(passed)} of {total} compounds ({pct:.0f}%) — max {max_viol} violations"
+
     df = pd.DataFrame(rows) if rows else None
     logger.info(f"=== STEP 3 COMPLETE: {len(passed)}/{total} compounds passed Rule of 5 ===")
     return status, passed, df
@@ -915,8 +957,9 @@ def create_tab():
         gr.Markdown(
             "---\n## Step 3: Rule of 5 Filter\n"
             "Lipinski's Rule of 5: MW \u2264 500, LogP \u2264 5, "
-            "HBD \u2264 5, HBA \u2264 10. Compounds with \u22641 "
-            "violation pass."
+            "HBD \u2264 5, HBA \u2264 10.\n\n"
+            "_Adaptive filtering: Keeps minimum 100 compounds, "
+            "aims for ~50% of input._"
         )
         ro5_btn = gr.Button(
             "Apply Rule of 5 Filter", variant="primary", size="lg"

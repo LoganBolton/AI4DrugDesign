@@ -199,3 +199,66 @@
 2026-03-17 17:07:45,987 - tabs.integrated_pipeline - INFO - === STEP 3: Applying Rule of 5 filter ===
 2026-03-17 17:07:45,987 - tabs.integrated_pipeline - INFO - Filtering 1212 compounds by Rule of 5
 2026-03-17 17:07:46,385 - tabs.integrated_pipeline - INFO - === STEP 3 COMPLETE: 1089/1212 compounds passed Rule of 5 ===
+2026-03-17 17:11:35,637 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:11:35,728 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:11:35,742 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:11:35,752 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7860/ "HTTP/1.1 200 OK"
+2026-03-17 17:11:35,785 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:11:36,008 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:11:36,010 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:11:45,942 - tabs.integrated_pipeline - INFO - === STEP 1: Analyzing protein 6LU7 ===
+2026-03-17 17:11:45,942 - tabs.integrated_pipeline - INFO - Fetching protein info for PDB ID: 6LU7
+2026-03-17 17:11:46,279 - tabs.integrated_pipeline - INFO - Found 0 ligand(s) in 6LU7
+2026-03-17 17:11:46,947 - tabs.integrated_pipeline - INFO - Found 0 binding site(s) in 6LU7
+2026-03-17 17:11:46,948 - tabs.integrated_pipeline - INFO - Successfully fetched complete protein info for 6LU7
+2026-03-17 17:11:47,385 - tabs.integrated_pipeline - INFO - UniProt ID for 6LU7: P0DTD1
+2026-03-17 17:11:47,424 - tabs.integrated_pipeline - INFO - Requesting AI analysis for 6LU7
+2026-03-17 17:12:15,638 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-17 17:12:15,652 - tabs.integrated_pipeline - INFO - AI analysis completed for 6LU7
+2026-03-17 17:12:15,653 - tabs.integrated_pipeline - INFO - === STEP 1 COMPLETE: 6LU7 analyzed successfully ===
+2026-03-17 17:12:15,673 - tabs.integrated_pipeline - INFO - === STEP 2: Fetching compounds ===
+2026-03-17 17:12:16,107 - tabs.integrated_pipeline - INFO - Fetching compounds for 6LU7 (UniProt: P0DTD1)
+2026-03-17 17:12:16,108 - tabs.integrated_pipeline - INFO - Looking up ChEMBL target for UniProt P0DTD1
+2026-03-17 17:12:17,505 - tabs.integrated_pipeline - INFO - Found ChEMBL target: CHEMBL4523582
+2026-03-17 17:12:17,506 - tabs.integrated_pipeline - INFO - Fetching activities for ChEMBL target CHEMBL4523582
+2026-03-17 17:12:30,931 - tabs.integrated_pipeline - INFO - Fetched 1212 compounds from ChEMBL activities
+2026-03-17 17:12:30,931 - tabs.integrated_pipeline - INFO - Fetching co-crystallized ligands from PDB 6LU7
+2026-03-17 17:12:31,101 - tabs.integrated_pipeline - INFO - Added 1212 PDB ligands
+2026-03-17 17:12:31,102 - tabs.integrated_pipeline - INFO - === STEP 2 COMPLETE: 1212 compounds discovered ===
+2026-03-17 17:12:33,776 - tabs.integrated_pipeline - INFO - === STEP 3: Applying Rule of 5 filter ===
+2026-03-17 17:12:33,776 - tabs.integrated_pipeline - INFO - Filtering 1212 compounds by Rule of 5
+2026-03-17 17:12:34,180 - tabs.integrated_pipeline - INFO - Rule of 5: Using ≤0 violations threshold
+2026-03-17 17:15:30,194 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:15:30,222 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:15:30,265 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:15:30,275 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7860/ "HTTP/1.1 200 OK"
+2026-03-17 17:15:30,306 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:15:30,602 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:15:30,603 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:15:44,399 - tabs.integrated_pipeline - INFO - === STEP 1: Analyzing protein 6LU7 ===
+2026-03-17 17:15:44,400 - tabs.integrated_pipeline - INFO - Fetching protein info for PDB ID: 6LU7
+2026-03-17 17:15:44,645 - tabs.integrated_pipeline - INFO - Found 0 ligand(s) in 6LU7
+2026-03-17 17:15:45,176 - tabs.integrated_pipeline - INFO - Found 0 binding site(s) in 6LU7
+2026-03-17 17:15:45,177 - tabs.integrated_pipeline - INFO - Successfully fetched complete protein info for 6LU7
+2026-03-17 17:15:45,704 - tabs.integrated_pipeline - INFO - UniProt ID for 6LU7: P0DTD1
+2026-03-17 17:15:45,727 - tabs.integrated_pipeline - INFO - Requesting AI analysis for 6LU7
+2026-03-17 17:16:19,012 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-17 17:16:19,027 - tabs.integrated_pipeline - INFO - AI analysis completed for 6LU7
+2026-03-17 17:16:19,027 - tabs.integrated_pipeline - INFO - === STEP 1 COMPLETE: 6LU7 analyzed successfully ===
+2026-03-17 17:16:19,046 - tabs.integrated_pipeline - INFO - === STEP 2: Fetching compounds ===
+2026-03-17 17:16:19,572 - tabs.integrated_pipeline - INFO - Fetching compounds for 6LU7 (UniProt: P0DTD1)
+2026-03-17 17:16:19,572 - tabs.integrated_pipeline - INFO - Looking up ChEMBL target for UniProt P0DTD1
+2026-03-17 17:16:21,065 - tabs.integrated_pipeline - INFO - Found ChEMBL target: CHEMBL4523582
+2026-03-17 17:16:21,066 - tabs.integrated_pipeline - INFO - Fetching activities for ChEMBL target CHEMBL4523582
+2026-03-17 17:16:33,479 - tabs.integrated_pipeline - INFO - Fetched 1212 compounds from ChEMBL activities
+2026-03-17 17:16:33,479 - tabs.integrated_pipeline - INFO - Fetching co-crystallized ligands from PDB 6LU7
+2026-03-17 17:16:33,620 - tabs.integrated_pipeline - INFO - Added 1212 PDB ligands
+2026-03-17 17:16:33,621 - tabs.integrated_pipeline - INFO - === STEP 2 COMPLETE: 1212 compounds discovered ===
+2026-03-17 17:16:43,146 - tabs.integrated_pipeline - INFO - === STEP 3: Applying Rule of 5 filter ===
+2026-03-17 17:16:43,147 - tabs.integrated_pipeline - INFO - Filtering 1212 compounds by Rule of 5
+2026-03-17 17:16:43,538 - tabs.integrated_pipeline - INFO - Rule of 5: Using ≤0 violations threshold
+2026-03-17 17:16:43,539 - tabs.integrated_pipeline - INFO - Rule of 5: Tightened to top 606 compounds
+2026-03-17 17:16:43,539 - tabs.integrated_pipeline - INFO - === STEP 3 COMPLETE: 606/1212 compounds passed Rule of 5 ===
+2026-03-17 17:16:56,689 - tabs.integrated_pipeline - INFO - === STEP 4: Ranking by binding activity ===
+2026-03-17 17:16:56,689 - tabs.integrated_pipeline - INFO - Ranking 606 compounds: 601 with binding data, 5 without
+2026-03-17 17:16:56,692 - tabs.integrated_pipeline - INFO - === STEP 4 COMPLETE: 606 compounds ranked ===
