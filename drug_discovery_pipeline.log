@@ -515,3 +515,121 @@
 2026-03-17 17:55:34,891 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
 2026-03-17 17:55:35,018 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
 2026-03-17 17:55:35,021 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:58:11,114 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:58:11,137 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 17:58:11,140 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:58:11,197 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7860/ "HTTP/1.1 200 OK"
+2026-03-17 17:58:11,258 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 17:58:11,463 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:58:11,475 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:58:19,715 - tabs.integrated_pipeline - INFO - === STEP 1: Analyzing protein 6LU7 ===
+2026-03-17 17:58:19,718 - tabs.integrated_pipeline - INFO - Fetching protein info for PDB ID: 6LU7
+2026-03-17 17:58:20,085 - tabs.integrated_pipeline - INFO - Found 0 ligand(s) in 6LU7
+2026-03-17 17:58:20,626 - tabs.integrated_pipeline - INFO - Found 0 binding site(s) in 6LU7
+2026-03-17 17:58:20,627 - tabs.integrated_pipeline - INFO - Successfully fetched complete protein info for 6LU7
+2026-03-17 17:58:21,146 - tabs.integrated_pipeline - INFO - UniProt ID for 6LU7: P0DTD1
+2026-03-17 17:58:21,173 - tabs.integrated_pipeline - INFO - Requesting AI analysis for 6LU7
+2026-03-17 17:58:48,308 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-17 17:58:48,323 - tabs.integrated_pipeline - INFO - AI analysis completed for 6LU7
+2026-03-17 17:58:48,324 - tabs.integrated_pipeline - INFO - === STEP 1 COMPLETE: 6LU7 analyzed successfully ===
+2026-03-17 17:58:48,340 - tabs.integrated_pipeline - INFO - === STEP 2: Fetching compounds ===
+2026-03-17 17:58:48,832 - tabs.integrated_pipeline - INFO - Fetching compounds for 6LU7 (UniProt: P0DTD1)
+2026-03-17 17:58:48,832 - tabs.integrated_pipeline - INFO - Looking up ChEMBL target for UniProt P0DTD1
+2026-03-17 17:58:50,066 - tabs.integrated_pipeline - INFO - Found ChEMBL target: CHEMBL4523582
+2026-03-17 17:58:50,067 - tabs.integrated_pipeline - INFO - Fetching activities for ChEMBL target CHEMBL4523582
+2026-03-17 17:59:00,951 - tabs.integrated_pipeline - INFO - Fetched 1212 compounds from ChEMBL activities
+2026-03-17 17:59:00,951 - tabs.integrated_pipeline - INFO - Fetching co-crystallized ligands from PDB 6LU7
+2026-03-17 17:59:01,064 - tabs.integrated_pipeline - INFO - Added 1212 PDB ligands
+2026-03-17 17:59:01,065 - tabs.integrated_pipeline - INFO - === STEP 2 COMPLETE: 1212 compounds discovered ===
+2026-03-17 17:59:05,195 - tabs.integrated_pipeline - INFO - === STEP 3: Applying Rule of 5 filter ===
+2026-03-17 17:59:05,195 - tabs.integrated_pipeline - INFO - Filtering 1212 compounds by Rule of 5
+2026-03-17 17:59:05,622 - tabs.integrated_pipeline - INFO - Rule of 5: Using ≤0 violations threshold
+2026-03-17 17:59:05,622 - tabs.integrated_pipeline - INFO - Rule of 5: Tightened to top 606 compounds
+2026-03-17 17:59:05,623 - tabs.integrated_pipeline - INFO - === STEP 3 COMPLETE: 606/1212 compounds passed Rule of 5 ===
+2026-03-17 17:59:12,251 - tabs.integrated_pipeline - INFO - === STEP 4: Ranking by binding activity (AutoDock Vina) ===
+2026-03-17 17:59:12,252 - tabs.integrated_pipeline - INFO - psutil not available, using conservative estimate: 12 CPUs → 10 workers
+2026-03-17 17:59:12,252 - tabs.integrated_pipeline - INFO - Docking 50 compounds in parallel (10 workers) - ETA: 2.5min
+2026-03-17 17:59:12,462 - tabs.integrated_pipeline - INFO - Binding center: (-11.575, 14.612, 65.164)
+2026-03-17 17:59:14,808 - tabs.integrated_pipeline - INFO - Receptor prepared, starting parallel docking...
+2026-03-17 17:59:18,806 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:18,814 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:18,831 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:18,844 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:18,854 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:18,880 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:18,892 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:18,901 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:18,902 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:18,907 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:18,928 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:18,931 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:18,985 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:18,989 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:19,000 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:19,001 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:19,039 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:19,062 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:19,079 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:19,101 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 17:59:19,106 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:19,116 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:19,148 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:19,237 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:19,238 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:19,328 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:19,356 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:20,663 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:21,220 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:21,336 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:31,999 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:32,129 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:43,213 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:44,592 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:44,595 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:44,633 - tabs.integrated_pipeline - INFO - Docking progress: 5/50 (10%) - 0 failed
+2026-03-17 17:59:50,705 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:57,670 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:58,481 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 17:59:59,229 - tabs.integrated_pipeline - INFO - Docking progress: 10/50 (20%) - 0 failed
+2026-03-17 17:59:59,286 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 18:00:24,195 - tabs.integrated_pipeline - INFO - Docking progress: 15/50 (30%) - 0 failed
+2026-03-17 18:00:34,843 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 18:00:34,914 - tabs.integrated_pipeline - INFO - Docking progress: 20/50 (40%) - 0 failed
+2026-03-17 18:00:42,003 - tabs.integrated_pipeline - INFO - Docking progress: 25/50 (50%) - 0 failed
+2026-03-17 18:00:50,669 - tabs.integrated_pipeline - INFO - Docking progress: 30/50 (60%) - 1 failed
+2026-03-17 18:01:06,720 - tabs.integrated_pipeline - INFO - Docking progress: 35/50 (70%) - 1 failed
+2026-03-17 18:01:28,184 - tabs.integrated_pipeline - INFO - Docking progress: 40/50 (80%) - 1 failed
+2026-03-17 18:01:36,050 - tabs.integrated_pipeline - INFO - Docking progress: 45/50 (90%) - 1 failed
+2026-03-17 18:01:46,172 - tabs.integrated_pipeline - INFO - Docking progress: 50/50 (100%) - 1 failed
+2026-03-17 18:01:46,871 - tabs.integrated_pipeline - INFO - Parallel docking complete: 50 compounds (1 failed)
+2026-03-17 18:01:46,874 - tabs.integrated_pipeline - INFO - === STEP 4 COMPLETE: 49 successful, 1 failed ===
+2026-03-17 18:01:50,154 - tabs.integrated_pipeline - INFO - === STEP 5: Applying ADME filter ===
+2026-03-17 18:01:50,154 - tabs.integrated_pipeline - INFO - Filtering 49 compounds by ADME criteria
+2026-03-17 18:01:50,173 - tabs.integrated_pipeline - WARNING - ADME: Using all 49 compounds
+2026-03-17 18:01:50,175 - tabs.integrated_pipeline - INFO - === STEP 5 COMPLETE: 49/49 compounds passed ADME filter ===
+2026-03-17 18:01:50,216 - tabs.integrated_pipeline - INFO - Populated compound selector with 49 compounds
+2026-03-17 18:01:50,300 - tabs.integrated_pipeline - INFO - Selected compound: CHEMBL4874401 (ChEMBL: CHEMBL4874401)
+2026-03-17 18:02:00,209 - tabs.integrated_pipeline - INFO - Selected compound: CHEMBL4858725 (ChEMBL: CHEMBL4858725)
+2026-03-17 18:02:03,060 - tabs.integrated_pipeline - INFO - Selected compound: CHEMBL5186059 (ChEMBL: CHEMBL5186059)
+2026-03-17 18:02:07,271 - tabs.integrated_pipeline - INFO - Selected compound: CHEMBL5174111 (ChEMBL: CHEMBL5174111)
+2026-03-17 18:02:12,729 - tabs.integrated_pipeline - INFO - === Generating AI compound explanation ===
+2026-03-17 18:02:12,758 - tabs.integrated_pipeline - INFO - Generating AI explanation for CHEMBL5174111 targeting 6LU7
+2026-03-17 18:03:12,790 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-17 18:03:12,795 - tabs.integrated_pipeline - INFO - AI compound explanation completed successfully
+2026-03-17 18:03:13,844 - tabs.integrated_pipeline - INFO - === STEP 3: Applying Rule of 5 filter ===
+2026-03-17 18:03:13,845 - tabs.integrated_pipeline - INFO - Filtering 1212 compounds by Rule of 5
+2026-03-17 18:03:14,233 - tabs.integrated_pipeline - INFO - Rule of 5: Using ≤0 violations threshold
+2026-03-17 18:03:14,233 - tabs.integrated_pipeline - INFO - Rule of 5: Tightened to top 606 compounds
+2026-03-17 18:03:14,234 - tabs.integrated_pipeline - INFO - === STEP 3 COMPLETE: 606/1212 compounds passed Rule of 5 ===
+2026-03-17 18:04:08,015 - tabs.integrated_pipeline - INFO - === STEP 5: Applying ADME filter ===
+2026-03-17 18:04:08,015 - tabs.integrated_pipeline - INFO - Filtering 49 compounds by ADME criteria
+2026-03-17 18:04:08,037 - tabs.integrated_pipeline - WARNING - ADME: Using all 49 compounds
+2026-03-17 18:04:08,040 - tabs.integrated_pipeline - INFO - === STEP 5 COMPLETE: 49/49 compounds passed ADME filter ===
+2026-03-17 18:04:08,070 - tabs.integrated_pipeline - INFO - Populated compound selector with 49 compounds
+2026-03-17 18:04:08,096 - tabs.integrated_pipeline - INFO - Selected compound: CHEMBL4874401 (ChEMBL: CHEMBL4874401)
+2026-03-17 18:04:45,135 - tabs.integrated_pipeline - INFO - Selected compound: CHEMBL4864060 (ChEMBL: CHEMBL4864060)
+2026-03-17 18:04:48,019 - tabs.integrated_pipeline - INFO - Selected compound: CHEMBL4868194 (ChEMBL: CHEMBL4868194)
+2026-03-17 18:04:48,930 - tabs.integrated_pipeline - INFO - Selected compound: CHEMBL4861309 (ChEMBL: CHEMBL4861309)
+2026-03-17 18:04:50,247 - tabs.integrated_pipeline - INFO - Selected compound: CHEMBL5173143 (ChEMBL: CHEMBL5173143)
+2026-03-17 18:05:00,004 - tabs.integrated_pipeline - INFO - Selected compound: PF-00835231 (ChEMBL: CHEMBL4777223)
+2026-03-17 18:05:02,354 - tabs.integrated_pipeline - INFO - Selected compound: CHEMBL5182106 (ChEMBL: CHEMBL5182106)

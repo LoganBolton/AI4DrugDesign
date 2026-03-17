@@ -1069,6 +1069,80 @@ def _ai_explain_compound(selected_state, protein_state):
         return f"AI analysis failed: {exc}"
 
 
+def _populate_compound_selector(final_state):
+    """Populate dropdown with compound choices after ADME filter."""
+    if not final_state:
+        return gr.Dropdown(choices=[], value=None)
+
+    # Create choices as list of tuples: (display_name, index)
+    choices = []
+    for i, compound in enumerate(final_state):
+        # Display format: "Rank 1: CHEMBL123 (Name) - Vina: -8.5"
+        vina_score = compound.get("vina_affinity", "N/A")
+        vina_str = f"{vina_score:.2f}" if isinstance(vina_score, (int, float)) and vina_score != float('inf') else "N/A"
+
+        display_name = (
+            f"Rank {compound.get('binding_rank', i+1)}: "
+            f"{compound.get('chembl_id', 'N/A')} ({compound.get('name', 'Unknown')[:30]}) - "
+            f"Vina: {vina_str} kcal/mol, ADME: {compound.get('adme_score', 'N/A')}/6"
+        )
+        choices.append((display_name, i))
+
+    logger.info(f"Populated compound selector with {len(choices)} compounds")
+    return gr.Dropdown(choices=choices, value=None if not choices else choices[0][1])
+
+
+def _on_compound_selected(selected_idx, final_state):
+    """Handle compound selection from dropdown."""
+    if final_state is None or selected_idx is None:
+        logger.warning("Compound selection attempted with no compounds or index")
+        return "No compound selected.", None, None
+
+    if selected_idx >= len(final_state):
+        logger.warning(f"Invalid compound index selected: {selected_idx}")
+        return "Invalid selection.", None, None
+
+    compound = final_state[selected_idx]
+    smiles = compound["smiles"]
+    logger.info(f"Selected compound: {compound.get('name')} (ChEMBL: {compound.get('chembl_id')})")
+
+    # Build detailed information text
+    detail = (
+        f"{'=' * 50}\n"
+        f"  COMPOUND: {compound['name']}\n"
+        f"{'=' * 50}\n"
+        f"ChEMBL ID        : {compound.get('chembl_id', 'N/A')}\n"
+        f"SMILES           : {smiles}\n\n"
+        f"PROPERTIES:\n"
+        f"  Molecular Weight : {compound.get('mw', 'N/A')}\n"
+        f"  LogP             : {compound.get('logp', 'N/A')}\n"
+        f"  H-Bond Donors    : {compound.get('hbd', 'N/A')}\n"
+        f"  H-Bond Acceptors : {compound.get('hba', 'N/A')}\n"
+        f"  TPSA             : {compound.get('tpsa', 'N/A')}\n"
+        f"  Rotatable Bonds  : {compound.get('rot_bonds', 'N/A')}\n\n"
+        f"BINDING DATA:\n"
+        f"  Vina Affinity : {compound.get('vina_affinity', 'N/A')} kcal/mol\n"
+        f"  Assay Type    : {compound.get('activity_type', 'N/A')}\n"
+        f"  Value         : {compound.get('activity_value', 'N/A')} "
+        f"{compound.get('activity_units', '')}\n\n"
+        f"FILTERS:\n"
+        f"  Rule of 5  : "
+        f"{'Pass' if compound.get('ro5_pass') else 'Fail'} "
+        f"({compound.get('ro5_violations', '?')} violations)\n"
+        f"  ADME Score : {compound.get('adme_score', 'N/A')}/6\n"
+        f"{'=' * 50}"
+    )
+
+    # Generate 2D structure image
+    mol = Chem.MolFromSmiles(smiles)
+    img = None
+    if mol:
+        AllChem.Compute2DCoords(mol)
+        img = Draw.MolToImage(mol, size=(400, 400))
+
+    return detail, img, compound
+
+
 def _ai_explain_protein(protein_state):
     """AI-generated deep dive on the protein target."""
     logger.info("=== Generating AI protein deep dive ===")
@@ -1271,7 +1345,7 @@ def create_tab():
         adme_status = gr.Textbox(
             label="Status", interactive=False, lines=1
         )
-        with gr.Accordion("Final Compounds — Click a row to see details", open=True):
+        with gr.Accordion("Final Compounds (Summary Table)", open=True):
             adme_table = gr.Dataframe(
                 label="Final Filtered Compounds",
                 interactive=False,
@@ -1296,10 +1370,18 @@ def create_tab():
         # STEP 6 — Compound Detail
         # ────────────────────────────────────────────────────────
         gr.Markdown(
-            "---\n## Compound Detail\n"
-            "Click any row in the results table above to inspect a "
-            "compound."
+            "---\n## Step 6: Compound Detail View\n"
+            "Select a compound from the list below to view detailed information."
         )
+
+        compound_selector = gr.Dropdown(
+            label="Select Compound to View Details",
+            choices=[],
+            value=None,
+            interactive=True,
+            scale=2,
+        )
+
         with gr.Row():
             with gr.Column(scale=1):
                 detail_text = gr.Textbox(
@@ -1382,6 +1464,10 @@ def create_tab():
             _apply_adme_filter,
             inputs=[ranked_state],
             outputs=[adme_status, final_state, adme_table],
+        ).then(
+            _populate_compound_selector,
+            inputs=[final_state],
+            outputs=[compound_selector],
         )
 
         # Run all filters (Steps 3-5 chained)
@@ -1397,14 +1483,27 @@ def create_tab():
             _apply_adme_filter,
             inputs=[ranked_state],
             outputs=[adme_status, final_state, adme_table],
+        ).then(
+            _populate_compound_selector,
+            inputs=[final_state],
+            outputs=[compound_selector],
         )
 
-        # Compound selection & detail
+        # Compound selection & detail (dropdown selector)
+        compound_selector.change(
+            _on_compound_selected,
+            inputs=[compound_selector, final_state],
+            outputs=[detail_text, detail_image, selected_state],
+        )
+
+        # Alternative: table row selection (still works)
         adme_table.select(
             _on_select_compound,
             inputs=[final_state],
             outputs=[detail_text, detail_image, selected_state],
         )
+
+        # AI explanation
         explain_compound_btn.click(
             _ai_explain_compound,
             inputs=[selected_state, protein_state],
