@@ -207,6 +207,42 @@ def _update_protein_status():
     return "**Protein:** 🔄 Analyzing structure from RCSB PDB..."
 
 
+def _run_protein_and_compounds_parallel(pdb_id):
+    """Run protein analysis and compound discovery in parallel."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    logger.info("=== Starting parallel execution: Protein Analysis + Compound Discovery ===")
+
+    # Initialize return values
+    protein_results = None
+    compound_results = None
+
+    # Run both tasks in parallel using threads
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        # Submit both tasks
+        protein_future = executor.submit(_analyze_protein, pdb_id)
+        compound_future = executor.submit(_fetch_compounds, pdb_id)
+
+        # Wait for both to complete (they run in parallel)
+        protein_results = protein_future.result()
+        compound_results = compound_future.result()
+
+    logger.info("=== Parallel execution complete ===")
+
+    # Return all results
+    # protein_results: (status, text, info, viewer)
+    # compound_results: (status, compounds, table)
+    return (
+        protein_results[0],  # protein_status
+        protein_results[1],  # protein_text
+        protein_results[2],  # protein_state
+        protein_results[3],  # viewer_html
+        compound_results[0],  # compounds_status
+        compound_results[1],  # all_compounds_state
+        compound_results[2],  # compounds_table
+    )
+
+
 def _analyze_protein(pdb_id: str):
     """Step 1 handler: fetch info, build display text, 3D viewer."""
     logger.info(f"=== STEP 1: Analyzing protein {pdb_id} ===")
@@ -1408,29 +1444,19 @@ def create_tab():
         # Wire events
         # ────────────────────────────────────────────────────────
 
-        # Both Step 1 and Step 2 run in parallel when analyze button is clicked
-        # First, show loading status for both
+        # Both Step 1 and Step 2 run in TRUE PARALLEL when analyze button is clicked
         analyze_btn.click(
-            _update_protein_status,
-            inputs=None,
-            outputs=[protein_status],
-        )
-        analyze_btn.click(
-            _update_compound_status,
-            inputs=None,
-            outputs=[compounds_status],
-        )
-
-        # Then run the actual analysis
-        analyze_btn.click(
-            _analyze_protein,
+            _run_protein_and_compounds_parallel,
             inputs=[pdb_input],
-            outputs=[protein_status, protein_text, protein_state, viewer_html],
-        )
-        analyze_btn.click(
-            _fetch_compounds,
-            inputs=[pdb_input],  # Now takes PDB ID directly
-            outputs=[compounds_status, all_compounds_state, compounds_table],
+            outputs=[
+                protein_status,
+                protein_text,
+                protein_state,
+                viewer_html,
+                compounds_status,
+                all_compounds_state,
+                compounds_table,
+            ],
         )
 
         # Optional: manually re-fetch compounds
