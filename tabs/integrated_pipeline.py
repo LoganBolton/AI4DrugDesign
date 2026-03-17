@@ -11,6 +11,7 @@ Single-page workflow:
 """
 
 import html as html_module
+import logging
 import os
 
 import gradio as gr
@@ -19,6 +20,17 @@ import requests
 from openai import OpenAI
 from rdkit import Chem
 from rdkit.Chem import AllChem, Descriptors, Draw
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('drug_discovery_pipeline.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -78,11 +90,13 @@ _SKIP_LIGANDS = frozenset({
 def _fetch_protein_info(pdb_id: str) -> dict:
     """Fetch protein metadata from RCSB PDB."""
     pdb_id = pdb_id.strip().upper()
+    logger.info(f"Fetching protein info for PDB ID: {pdb_id}")
     base = "https://data.rcsb.org/rest/v1/core"
 
     r = requests.get(f"{base}/entry/{pdb_id}", timeout=15)
     r.raise_for_status()
     entry = r.json()
+    logger.debug(f"Retrieved entry data for {pdb_id}")
 
     title = entry.get("struct", {}).get("title", "N/A")
     keywords = entry.get("struct_keywords", {}).get("pdbx_keywords", "N/A")
@@ -97,8 +111,9 @@ def _fetch_protein_info(pdb_id: str) -> dict:
                     org = s.get("ncbi_scientific_name")
                     if org and org not in organisms:
                         organisms.append(org)
-    except Exception:
-        pass
+        logger.debug(f"Found {len(organisms)} organism(s) for {pdb_id}")
+    except Exception as e:
+        logger.warning(f"Failed to fetch organisms for {pdb_id}: {e}")
 
     # Resolution
     resolution = (
@@ -124,8 +139,11 @@ def _fetch_protein_info(pdb_id: str) -> dict:
                 name = d.get("name", comp_id)
                 if comp_id and comp_id not in _SKIP_LIGANDS:
                     ligands.append({"comp_id": comp_id, "name": name})
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Error fetching ligand entity {eid}: {e}")
             continue
+
+    logger.info(f"Found {len(ligands)} ligand(s) in {pdb_id}")
 
     # Binding sites
     binding_sites = []
@@ -141,9 +159,11 @@ def _fetch_protein_info(pdb_id: str) -> dict:
                     "id": sid,
                     "description": det.get("site_description", sid),
                 })
-    except Exception:
-        pass
+        logger.info(f"Found {len(binding_sites)} binding site(s) in {pdb_id}")
+    except Exception as e:
+        logger.warning(f"Failed to fetch binding sites for {pdb_id}: {e}")
 
+    logger.info(f"Successfully fetched complete protein info for {pdb_id}")
     return {
         "pdb_id": pdb_id,
         "title": title,
@@ -173,21 +193,26 @@ def _get_uniprot_from_pdb(pdb_id: str) -> str | None:
 
 def _analyze_protein(pdb_id: str):
     """Step 1 handler: fetch info, build display text, 3D viewer."""
+    logger.info(f"=== STEP 1: Analyzing protein {pdb_id} ===")
     pdb_id = (pdb_id or "").strip().upper()
     if not pdb_id:
+        logger.warning("Empty PDB ID provided")
         return "Please enter a PDB ID.", None, _VIEWER_PLACEHOLDER
 
     try:
         info = _fetch_protein_info(pdb_id)
     except requests.HTTPError as exc:
         code = exc.response.status_code if exc.response is not None else "?"
+        logger.error(f"HTTP error fetching {pdb_id}: {code}")
         if code == 404:
             return f"PDB ID '{pdb_id}' not found.", None, _VIEWER_PLACEHOLDER
         return f"Error fetching PDB data (HTTP {code}).", None, _VIEWER_PLACEHOLDER
     except Exception as exc:
+        logger.error(f"Error analyzing protein {pdb_id}: {exc}")
         return f"Error: {exc}", None, _VIEWER_PLACEHOLDER
 
     info["uniprot_id"] = _get_uniprot_from_pdb(pdb_id)
+    logger.info(f"UniProt ID for {pdb_id}: {info['uniprot_id']}")
 
     lig_str = (
         ", ".join(f"{l['comp_id']} ({l['name']})" for l in info["ligands"])
@@ -218,6 +243,7 @@ def _analyze_protein(pdb_id: str):
     client = _get_openai_client()
     if client:
         try:
+            logger.info(f"Requesting AI analysis for {pdb_id}")
             prompt = (
                 "You are an expert structural biologist. Briefly analyze this "
                 "protein for drug discovery.\n"
@@ -233,10 +259,13 @@ def _analyze_protein(pdb_id: str):
                 messages=[{"role": "user", "content": prompt}],
             )
             text += "\n\nAI ANALYSIS:\n" + resp.choices[0].message.content
+            logger.info(f"AI analysis completed for {pdb_id}")
         except Exception as exc:
+            logger.error(f"AI analysis failed for {pdb_id}: {exc}")
             text += f"\n\n[AI analysis failed: {exc}]"
 
     viewer = _build_3d_viewer_html(pdb_id)
+    logger.info(f"=== STEP 1 COMPLETE: {pdb_id} analyzed successfully ===")
     return text, info, viewer
 
 
@@ -245,11 +274,14 @@ def _analyze_protein(pdb_id: str):
 
 def _fetch_compounds(protein_info):
     """Fetch bioactive compounds from ChEMBL for the protein target."""
+    logger.info("=== STEP 2: Fetching compounds ===")
     if not protein_info:
+        logger.warning("No protein info provided")
         return "Please analyze a protein first (Step 1).", None, None
 
     pdb_id = protein_info["pdb_id"]
     uniprot_id = protein_info.get("uniprot_id")
+    logger.info(f"Fetching compounds for {pdb_id} (UniProt: {uniprot_id})")
 
     compounds: list[dict] = []
     seen_smiles: set[str] = set()
@@ -257,6 +289,7 @@ def _fetch_compounds(protein_info):
 
     # --- ChEMBL target lookup ---
     if uniprot_id:
+        logger.info(f"Looking up ChEMBL target for UniProt {uniprot_id}")
         try:
             r = requests.get(
                 "https://www.ebi.ac.uk/chembl/api/data/target.json",
@@ -265,19 +298,24 @@ def _fetch_compounds(protein_info):
                     "limit": 1,
                     "format": "json",
                 },
-                timeout=15,
+                timeout=60,  # ChEMBL API can be slow
             )
             if r.ok:
                 targets = r.json().get("targets", [])
                 if targets:
                     target_chembl_id = targets[0]["target_chembl_id"]
-        except Exception:
-            pass
+                    logger.info(f"Found ChEMBL target: {target_chembl_id}")
+                else:
+                    logger.warning(f"No ChEMBL target found for UniProt {uniprot_id}")
+        except Exception as e:
+            logger.error(f"Error looking up ChEMBL target: {e}")
 
     # --- Fetch activities ---
     if target_chembl_id:
+        logger.info(f"Fetching activities for ChEMBL target {target_chembl_id}")
         offset = 0
         while offset < 2000:
+            logger.debug(f"Fetching activities batch at offset {offset}")
             try:
                 r = requests.get(
                     "https://www.ebi.ac.uk/chembl/api/data/activity.json",
@@ -288,7 +326,7 @@ def _fetch_compounds(protein_info):
                         "offset": offset,
                         "format": "json",
                     },
-                    timeout=30,
+                    timeout=60,  # ChEMBL API can be slow
                 )
                 if not r.ok:
                     break
@@ -325,11 +363,18 @@ def _fetch_compounds(protein_info):
 
                 offset += 500
                 if len(activities) < 500:
+                    logger.debug(f"Reached end of activities (got {len(activities)} in last batch)")
                     break
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error fetching activities at offset {offset}: {e}")
                 break
 
+        logger.info(f"Fetched {len(compounds)} compounds from ChEMBL activities")
+    else:
+        logger.warning("No ChEMBL target ID available, skipping activity fetch")
+
     # --- Also grab co-crystallized ligands from the PDB ---
+    logger.info(f"Fetching co-crystallized ligands from PDB {pdb_id}")
     for lig in protein_info.get("ligands", []):
         try:
             r = requests.get(
@@ -351,10 +396,14 @@ def _fetch_compounds(protein_info):
                             "activity_units": "",
                         })
                         seen_smiles.add(smi)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Error fetching SMILES for ligand {lig['comp_id']}: {e}")
             continue
 
+    logger.info(f"Added {len(seen_smiles) - (len(compounds) - len(seen_smiles))} PDB ligands")
+
     if not compounds:
+        logger.warning(f"No compounds found for {pdb_id}")
         return (
             f"No compounds found for {pdb_id}. "
             "Try a different PDB ID with known drug targets.",
@@ -378,6 +427,7 @@ def _fetch_compounds(protein_info):
     if target_chembl_id:
         status += f" (ChEMBL: {target_chembl_id})"
 
+    logger.info(f"=== STEP 2 COMPLETE: {len(compounds)} compounds discovered ===")
     return status, compounds, pd.DataFrame(rows)
 
 
@@ -386,10 +436,13 @@ def _fetch_compounds(protein_info):
 
 def _apply_rule_of_5(compounds_state):
     """Filter by Lipinski Rule of 5."""
+    logger.info("=== STEP 3: Applying Rule of 5 filter ===")
     if not compounds_state:
+        logger.warning("No compounds provided for Rule of 5 filter")
         return "No compounds to filter. Run Step 2 first.", None, None
 
     total = len(compounds_state)
+    logger.info(f"Filtering {total} compounds by Rule of 5")
     passed = []
 
     for c in compounds_state:
@@ -438,6 +491,7 @@ def _apply_rule_of_5(compounds_state):
 
     status = f"Rule of 5: {len(passed)} of {total} compounds pass (\u22641 violation)"
     df = pd.DataFrame(rows) if rows else None
+    logger.info(f"=== STEP 3 COMPLETE: {len(passed)}/{total} compounds passed Rule of 5 ===")
     return status, passed, df
 
 
@@ -446,9 +500,12 @@ def _apply_rule_of_5(compounds_state):
 
 def _rank_by_activity(ro5_state):
     """Rank compounds by experimental binding data."""
+    logger.info("=== STEP 4: Ranking by binding activity ===")
     if not ro5_state:
+        logger.warning("No compounds provided for activity ranking")
         return "No compounds to rank. Run Step 3 first.", None, None
 
+    total = len(ro5_state)
     with_data = [
         c for c in ro5_state
         if c.get("activity_value") and c["activity_value"] > 0
@@ -457,6 +514,7 @@ def _rank_by_activity(ro5_state):
         c for c in ro5_state
         if not c.get("activity_value") or c["activity_value"] <= 0
     ]
+    logger.info(f"Ranking {total} compounds: {len(with_data)} with binding data, {len(without_data)} without")
 
     with_data.sort(key=lambda x: x["activity_value"])
     ranked = with_data + without_data
@@ -485,6 +543,7 @@ def _rank_by_activity(ro5_state):
         f"{len(with_data)} have experimental data."
     )
     df = pd.DataFrame(rows) if rows else None
+    logger.info(f"=== STEP 4 COMPLETE: {len(ranked)} compounds ranked ===")
     return status, ranked, df
 
 
@@ -493,10 +552,13 @@ def _rank_by_activity(ro5_state):
 
 def _apply_adme_filter(docked_state):
     """Filter by ADME criteria using RDKit descriptors."""
+    logger.info("=== STEP 5: Applying ADME filter ===")
     if not docked_state:
+        logger.warning("No compounds provided for ADME filter")
         return "No compounds to filter. Run Step 4 first.", None, None
 
     total = len(docked_state)
+    logger.info(f"Filtering {total} compounds by ADME criteria")
     passed = []
 
     for c in docked_state:
@@ -549,6 +611,7 @@ def _apply_adme_filter(docked_state):
         "(\u22655 of 6 criteria)"
     )
     df = pd.DataFrame(rows) if rows else None
+    logger.info(f"=== STEP 5 COMPLETE: {len(passed)}/{total} compounds passed ADME filter ===")
     return status, passed, df
 
 
@@ -558,13 +621,16 @@ def _apply_adme_filter(docked_state):
 def _on_select_compound(evt: gr.SelectData, final_state):
     """Handle click on a row in the final results table."""
     if not final_state:
+        logger.warning("Compound selection attempted with no compounds available")
         return "No compound selected.", None, None
     idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else evt.index
     if idx >= len(final_state):
+        logger.warning(f"Invalid compound index selected: {idx}")
         return "Invalid selection.", None, None
 
     compound = final_state[idx]
     smiles = compound["smiles"]
+    logger.info(f"Selected compound: {compound.get('name')} (ChEMBL: {compound.get('chembl_id')})")
 
     detail = (
         f"{'=' * 50}\n"
@@ -602,17 +668,22 @@ def _on_select_compound(evt: gr.SelectData, final_state):
 
 def _ai_explain_compound(selected_state, protein_state):
     """AI-generated explanation of how the compound interacts with the protein."""
+    logger.info("=== Generating AI compound explanation ===")
     if not selected_state:
+        logger.warning("AI explanation requested with no compound selected")
         return "Select a compound from the results table first."
     if not protein_state:
+        logger.warning("AI explanation requested with no protein data")
         return "No protein data available."
 
     client = _get_openai_client()
     if not client:
+        logger.warning("AI explanation requested but OpenAI API key not set")
         return "[OpenAI API key not set — cannot generate explanation]"
 
     c = selected_state
     p = protein_state
+    logger.info(f"Generating AI explanation for {c.get('name')} targeting {p['pdb_id']}")
 
     prompt = (
         "You are an expert medicinal chemist. Explain how this compound "
@@ -642,21 +713,27 @@ def _ai_explain_compound(selected_state, protein_state):
             model="gpt-5-nano-2025-08-07",
             messages=[{"role": "user", "content": prompt}],
         )
+        logger.info("AI compound explanation completed successfully")
         return resp.choices[0].message.content
     except Exception as exc:
+        logger.error(f"AI compound explanation failed: {exc}")
         return f"AI analysis failed: {exc}"
 
 
 def _ai_explain_protein(protein_state):
     """AI-generated deep dive on the protein target."""
+    logger.info("=== Generating AI protein deep dive ===")
     if not protein_state:
+        logger.warning("Protein deep dive requested with no protein data")
         return "No protein data available. Run Step 1 first."
 
     client = _get_openai_client()
     if not client:
+        logger.warning("Protein deep dive requested but OpenAI API key not set")
         return "[OpenAI API key not set]"
 
     p = protein_state
+    logger.info(f"Generating protein deep dive for {p['pdb_id']}")
     lig_str = (
         ", ".join(f"{l['comp_id']} ({l['name']})" for l in p.get("ligands", []))
         or "none"
@@ -686,8 +763,10 @@ def _ai_explain_protein(protein_state):
             model="gpt-5-nano-2025-08-07",
             messages=[{"role": "user", "content": prompt}],
         )
+        logger.info("AI protein deep dive completed successfully")
         return resp.choices[0].message.content
     except Exception as exc:
+        logger.error(f"AI protein deep dive failed: {exc}")
         return f"AI analysis failed: {exc}"
 
 
@@ -752,7 +831,9 @@ def create_tab():
         gr.Markdown(
             "---\n## Step 2: Compound Discovery\n"
             "Fetches bioactive compounds from the ChEMBL database "
-            "that target this protein."
+            "that target this protein.\n\n"
+            "_Note: This may take 30-60 seconds as ChEMBL queries "
+            "can be slow._"
         )
         fetch_btn = gr.Button(
             "Find Candidate Compounds", variant="primary", size="lg"

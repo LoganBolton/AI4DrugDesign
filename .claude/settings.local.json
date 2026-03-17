@@ -9,7 +9,8 @@
       "Bash(uv sync:*)",
       "Bash(uv run:*)",
       "Bash(ls:*)",
-      "Bash(python -m py_compile:*)"
+      "Bash(python -m py_compile:*)",
+      "Bash(python:*)"
     ]
   }
 }

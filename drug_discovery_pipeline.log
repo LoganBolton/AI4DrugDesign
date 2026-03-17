@@ -1,0 +1,26 @@
+2026-03-17 16:26:20,867 - httpx - INFO - HTTP Request: GET http://127.0.0.1:7860/gradio_api/startup-events "HTTP/1.1 200 OK"
+2026-03-17 16:26:20,877 - httpx - INFO - HTTP Request: HEAD http://127.0.0.1:7860/ "HTTP/1.1 200 OK"
+2026-03-17 16:26:21,117 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 16:26:21,166 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-initiated-analytics "HTTP/1.1 200 OK"
+2026-03-17 16:26:21,183 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/telemetry/https%3A/api.gradio.app/gradio-launched-telemetry "HTTP/1.1 200 OK"
+2026-03-17 16:26:22,114 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 16:26:22,995 - httpx - INFO - HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+2026-03-17 16:26:34,981 - tabs.integrated_pipeline - INFO - === STEP 1: Analyzing protein 6LU7 ===
+2026-03-17 16:26:34,983 - tabs.integrated_pipeline - INFO - Fetching protein info for PDB ID: 6LU7
+2026-03-17 16:26:35,239 - tabs.integrated_pipeline - INFO - Found 0 ligand(s) in 6LU7
+2026-03-17 16:26:35,974 - tabs.integrated_pipeline - INFO - Found 0 binding site(s) in 6LU7
+2026-03-17 16:26:35,975 - tabs.integrated_pipeline - INFO - Successfully fetched complete protein info for 6LU7
+2026-03-17 16:26:36,398 - tabs.integrated_pipeline - INFO - UniProt ID for 6LU7: P0DTD1
+2026-03-17 16:26:36,419 - tabs.integrated_pipeline - INFO - Requesting AI analysis for 6LU7
+2026-03-17 16:27:20,065 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-17 16:27:20,076 - tabs.integrated_pipeline - INFO - AI analysis completed for 6LU7
+2026-03-17 16:27:20,077 - tabs.integrated_pipeline - INFO - === STEP 1 COMPLETE: 6LU7 analyzed successfully ===
+2026-03-17 16:27:24,372 - tabs.integrated_pipeline - INFO - === STEP 2: Fetching compounds ===
+2026-03-17 16:27:24,372 - tabs.integrated_pipeline - INFO - Fetching compounds for 6LU7 (UniProt: P0DTD1)
+2026-03-17 16:27:24,372 - tabs.integrated_pipeline - INFO - Looking up ChEMBL target for UniProt P0DTD1
+2026-03-17 16:27:36,473 - tabs.integrated_pipeline - INFO - Found ChEMBL target: CHEMBL4523582
+2026-03-17 16:27:36,473 - tabs.integrated_pipeline - INFO - Fetching activities for ChEMBL target CHEMBL4523582
+2026-03-17 16:28:59,448 - tabs.integrated_pipeline - INFO - Fetched 1212 compounds from ChEMBL activities
+2026-03-17 16:28:59,448 - tabs.integrated_pipeline - INFO - Fetching co-crystallized ligands from PDB 6LU7
+2026-03-17 16:28:59,448 - tabs.integrated_pipeline - INFO - Added 1212 PDB ligands
+2026-03-17 16:28:59,449 - tabs.integrated_pipeline - INFO - === STEP 2 COMPLETE: 1212 compounds discovered ===
