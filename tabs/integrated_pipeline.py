@@ -204,7 +204,7 @@ def _get_uniprot_from_pdb(pdb_id: str) -> str | None:
 
 def _update_protein_status():
     """Show status when protein analysis starts."""
-    return "**Protein:** 🔄 Analyzing structure from RCSB PDB..."
+    return "**Step 1 – Protein:** 🔄 Analyzing structure from RCSB PDB..."
 
 
 def _run_protein_and_compounds_parallel(pdb_id):
@@ -253,11 +253,11 @@ def _run_complete_pipeline(pdb_id, num_dock=20):
 
     # Current state of all 17 outputs — updated progressively
     o = dict(
-        protein_status="**Protein:** 🔄 Analyzing...",
+        protein_status="**Step 1 – Protein:** 🔄 Analyzing structure from RCSB PDB...",
         protein_text="",
         protein_state=None,
         viewer_html=_VIEWER_PLACEHOLDER,
-        compounds_status="**Compounds:** 🔄 Fetching from ChEMBL...",
+        compounds_status="**Step 2 – Compounds:** 🔄 Fetching from ChEMBL...",
         all_compounds_state=None,
         compounds_table=None,
         ro5_status="**Step 3 – Rule of 5:** ⏳ Waiting...",
@@ -344,7 +344,7 @@ def _analyze_protein(pdb_id: str):
     if not pdb_id:
         logger.warning("Empty PDB ID provided")
         return (
-            "**Protein:** ❌ Please enter a PDB ID",
+            "**Step 1 – Protein:** ❌ Please enter a PDB ID",
             "Please enter a PDB ID.",
             None,
             _VIEWER_PLACEHOLDER,
@@ -357,13 +357,13 @@ def _analyze_protein(pdb_id: str):
         logger.error(f"HTTP error fetching {pdb_id}: {code}")
         if code == 404:
             return (
-                f"**Protein:** ❌ PDB ID '{pdb_id}' not found",
+                f"**Step 1 – Protein:** ❌ PDB ID '{pdb_id}' not found",
                 f"PDB ID '{pdb_id}' not found.",
                 None,
                 _VIEWER_PLACEHOLDER,
             )
         return (
-            f"**Protein:** ❌ Error fetching data (HTTP {code})",
+            f"**Step 1 – Protein:** ❌ Error fetching data (HTTP {code})",
             f"Error fetching PDB data (HTTP {code}).",
             None,
             _VIEWER_PLACEHOLDER,
@@ -371,7 +371,7 @@ def _analyze_protein(pdb_id: str):
     except Exception as exc:
         logger.error(f"Error analyzing protein {pdb_id}: {exc}")
         return (
-            f"**Protein:** ❌ Error: {exc}",
+            f"**Step 1 – Protein:** ❌ Error: {exc}",
             f"Error: {exc}",
             None,
             _VIEWER_PLACEHOLDER,
@@ -433,7 +433,7 @@ def _analyze_protein(pdb_id: str):
     viewer = _build_3d_viewer_html(pdb_id)
     logger.info(f"=== STEP 1 COMPLETE: {pdb_id} analyzed successfully ===")
 
-    status = f"**Protein:** ✅ Analysis complete for {pdb_id}"
+    status = f"**Step 1 – Protein:** ✅ Analysis complete for {pdb_id}"
     return status, text, info, viewer
 
 
@@ -442,7 +442,7 @@ def _analyze_protein(pdb_id: str):
 
 def _update_compound_status():
     """Show status when compound fetching starts."""
-    return "**Compounds:** 🔄 Fetching from ChEMBL (30-60s)..."
+    return "**Step 2 – Compounds:** 🔄 Fetching from ChEMBL (30-60s)..."
 
 
 def _fetch_compounds(pdb_id):
@@ -452,7 +452,7 @@ def _fetch_compounds(pdb_id):
     pdb_id = (pdb_id or "").strip().upper()
     if not pdb_id:
         logger.warning("No PDB ID provided")
-        return "**Compounds:** ❌ Enter a PDB ID first", None, None
+        return "**Step 2 – Compounds:** ❌ Enter a PDB ID first", None, None
 
     # Get UniProt mapping for this protein
     uniprot_id = _get_uniprot_from_pdb(pdb_id)
@@ -608,7 +608,7 @@ def _fetch_compounds(pdb_id):
     if not compounds:
         logger.warning(f"No compounds found for {pdb_id}")
         return (
-            f"**Compounds:** ⚠️ None found for {pdb_id}",
+            f"**Step 2 – Compounds:** ⚠️ None found for {pdb_id}",
             None,
             None,
         )
@@ -625,7 +625,7 @@ def _fetch_compounds(pdb_id):
             "Units": c["activity_units"],
         })
 
-    status = f"**Compounds:** ✅ Found {len(compounds)} for {pdb_id}"
+    status = f"**Step 2 – Compounds:** ✅ Found {len(compounds)} for {pdb_id}"
     if target_chembl_id:
         status += f" ({target_chembl_id})"
 
@@ -1374,11 +1374,8 @@ def create_tab():
         gr.Markdown("---\n## Pipeline Progress")
 
         # Step 1: Protein Analysis
-        with gr.Accordion("Step 1: Protein Analysis", open=False):
-            protein_status = gr.Markdown(
-                value="**Protein:** Not started",
-                visible=True,
-            )
+        protein_status = gr.Markdown(value="**Step 1 – Protein:** Not started")
+        with gr.Accordion("Step 1: Protein Details", open=False):
             with gr.Row():
                 with gr.Column(scale=1):
                     protein_text = gr.Textbox(
@@ -1390,11 +1387,8 @@ def create_tab():
                     viewer_html = gr.HTML(value=_VIEWER_PLACEHOLDER)
 
         # Step 2: Compound Discovery
-        with gr.Accordion("Step 2: Compound Discovery", open=False):
-            compounds_status = gr.Markdown(
-                value="**Compounds:** Not started",
-                visible=True,
-            )
+        compounds_status = gr.Markdown(value="**Step 2 – Compounds:** Not started")
+        with gr.Accordion("Step 2: Discovered Compounds", open=False):
             compounds_table = gr.Dataframe(
                 label="Compounds from ChEMBL",
                 interactive=False,
@@ -1490,6 +1484,7 @@ def create_tab():
                 adme_table,
                 compound_selector,
             ],
+            show_progress="hidden",
         )
 
         # Compound selection & detail (dropdown selector)
