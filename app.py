@@ -4,17 +4,17 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 from tabs import (
+    visualization_3d,
     chat,
     compound_optimization,
     compound_visualization,
-    molecular_docking,
+    #molecular_docking,
     protein_analysis,
     protein_image_tab,
 )
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 def chat_fn(message, history):
     messages = []
     for user_msg, assistant_msg in history:
@@ -36,7 +36,8 @@ with gr.Blocks() as demo:
     protein_analysis.create_tab()
     compound_optimization.create_tab()
     compound_visualization.create_tab()
-    molecular_docking.create_tab()
+    #molecular_docking.create_tab()
     protein_image_tab.create_tab()
+    visualization_3d.create_tab()
 
 demo.launch()

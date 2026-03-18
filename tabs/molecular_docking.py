@@ -11,7 +11,7 @@ import numpy as np
 from meeko import MoleculePreparation, PDBQTWriterLegacy
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from vina import Vina
+#from vina import Vina
 
 
 # Common non-drug HETATM residues to ignore when searching for a co-ligand
