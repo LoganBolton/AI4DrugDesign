@@ -24,7 +24,6 @@ import gradio as gr
 import numpy as np
 import pandas as pd
 import requests
-from meeko import MoleculePreparation, PDBQTWriterLegacy
 from openai import OpenAI
 from rdkit import Chem
 from rdkit.Chem import AllChem, Descriptors, Draw
@@ -98,6 +97,44 @@ _SKIP_LIGANDS = frozenset({
 })
 
 
+def _fetch_pdb_ligands(pdb_id: str, entry: dict | None = None) -> list[dict]:
+    """Fetch non-polymer ligands from a PDB entry.
+
+    If *entry* is already available (from a prior /core/entry call), pass it
+    to avoid a redundant request.
+    """
+    base = "https://data.rcsb.org/rest/v1/core"
+    if entry is None:
+        try:
+            r = requests.get(f"{base}/entry/{pdb_id}", timeout=15)
+            if not r.ok:
+                return []
+            entry = r.json()
+        except Exception as exc:
+            logger.warning(f"Error fetching PDB entry for ligands: {exc}")
+            return []
+
+    non_poly_ids = (
+        entry.get("rcsb_entry_container_identifiers", {})
+        .get("non_polymer_entity_ids") or []
+    )
+    ligands: list[dict] = []
+    for eid in non_poly_ids[:10]:
+        try:
+            er = requests.get(
+                f"{base}/nonpolymer_entity/{pdb_id}/{eid}", timeout=10
+            )
+            if er.ok:
+                d = er.json().get("pdbx_entity_nonpoly", {})
+                comp_id = d.get("comp_id", "")
+                name = d.get("name", comp_id)
+                if comp_id and comp_id not in _SKIP_LIGANDS:
+                    ligands.append({"comp_id": comp_id, "name": name})
+        except Exception as exc:
+            logger.debug(f"Error fetching ligand entity {eid}: {exc}")
+    return ligands
+
+
 def _fetch_protein_info(pdb_id: str) -> dict:
     """Fetch protein metadata from RCSB PDB."""
     pdb_id = pdb_id.strip().upper()
@@ -133,26 +170,7 @@ def _fetch_protein_info(pdb_id: str) -> dict:
         else None
     )
 
-    # Ligands
-    non_poly_ids = (
-        entry.get("rcsb_entry_container_identifiers", {})
-        .get("non_polymer_entity_ids") or []
-    )
-    ligands = []
-    for eid in non_poly_ids[:10]:
-        try:
-            er = requests.get(
-                f"{base}/nonpolymer_entity/{pdb_id}/{eid}", timeout=10
-            )
-            if er.ok:
-                d = er.json().get("pdbx_entity_nonpoly", {})
-                comp_id = d.get("comp_id", "")
-                name = d.get("name", comp_id)
-                if comp_id and comp_id not in _SKIP_LIGANDS:
-                    ligands.append({"comp_id": comp_id, "name": name})
-        except Exception as e:
-            logger.debug(f"Error fetching ligand entity {eid}: {e}")
-            continue
+    ligands = _fetch_pdb_ligands(pdb_id, entry)
 
     logger.info(f"Found {len(ligands)} ligand(s) in {pdb_id}")
 
@@ -202,45 +220,22 @@ def _get_uniprot_from_pdb(pdb_id: str) -> str | None:
     return None
 
 
-def _update_protein_status():
-    """Show status when protein analysis starts."""
-    return "**Step 1 – Protein:** 🔄 Analyzing structure from RCSB PDB..."
-
-
 def _run_protein_and_compounds_parallel(pdb_id):
     """Run protein analysis and compound discovery in parallel."""
-    from concurrent.futures import ThreadPoolExecutor
-
     logger.info("=== Starting parallel execution: Protein Analysis + Compound Discovery ===")
 
-    # Initialize return values
-    protein_results = None
-    compound_results = None
-
-    # Run both tasks in parallel using threads
     with ThreadPoolExecutor(max_workers=2) as executor:
-        # Submit both tasks
         protein_future = executor.submit(_analyze_protein, pdb_id)
         compound_future = executor.submit(_fetch_compounds, pdb_id)
 
-        # Wait for both to complete (they run in parallel)
         protein_results = protein_future.result()
         compound_results = compound_future.result()
 
     logger.info("=== Parallel execution complete ===")
 
-    # Return all results
     # protein_results: (status, text, info, viewer)
     # compound_results: (status, compounds, table)
-    return (
-        protein_results[0],  # protein_status
-        protein_results[1],  # protein_text
-        protein_results[2],  # protein_state
-        protein_results[3],  # viewer_html
-        compound_results[0],  # compounds_status
-        compound_results[1],  # all_compounds_state
-        compound_results[2],  # compounds_table
-    )
+    return (*protein_results, *compound_results)
 
 
 def _pipeline_initial_status():
@@ -301,7 +296,7 @@ def _analyze_protein(pdb_id: str):
     logger.info(f"UniProt ID for {pdb_id}: {info['uniprot_id']}")
 
     lig_str = (
-        ", ".join(f"{l['comp_id']} ({l['name']})" for l in info["ligands"])
+        ", ".join(f"{lig['comp_id']} ({lig['name']})" for lig in info["ligands"])
         if info["ligands"]
         else "None identified"
     )
@@ -358,11 +353,6 @@ def _analyze_protein(pdb_id: str):
 
 
 # ── Step 2 — Compound Discovery ────────────────────────────────────────
-
-
-def _update_compound_status():
-    """Show status when compound fetching starts."""
-    return "**Step 2 – Compounds:** 🔄 Fetching from ChEMBL (30-60s)..."
 
 
 def _fetch_compounds(pdb_id):
@@ -470,33 +460,8 @@ def _fetch_compounds(pdb_id):
 
     # --- Also grab co-crystallized ligands from the PDB ---
     logger.info(f"Fetching co-crystallized ligands from PDB {pdb_id}")
-
-    # Fetch ligands from PDB structure
-    pdb_ligands = []
-    try:
-        base = "https://data.rcsb.org/rest/v1/core"
-        r = requests.get(f"{base}/entry/{pdb_id}", timeout=15)
-        if r.ok:
-            entry = r.json()
-            non_poly_ids = (
-                entry.get("rcsb_entry_container_identifiers", {})
-                .get("non_polymer_entity_ids") or []
-            )
-            for eid in non_poly_ids[:10]:
-                try:
-                    er = requests.get(
-                        f"{base}/nonpolymer_entity/{pdb_id}/{eid}", timeout=10
-                    )
-                    if er.ok:
-                        d = er.json().get("pdbx_entity_nonpoly", {})
-                        comp_id = d.get("comp_id", "")
-                        name = d.get("name", comp_id)
-                        if comp_id and comp_id not in _SKIP_LIGANDS:
-                            pdb_ligands.append({"comp_id": comp_id, "name": name})
-                except Exception as e:
-                    logger.debug(f"Error fetching ligand entity {eid}: {e}")
-    except Exception as e:
-        logger.warning(f"Error fetching PDB ligands: {e}")
+    pdb_ligands = _fetch_pdb_ligands(pdb_id)
+    chembl_count = len(compounds)
 
     for lig in pdb_ligands:
         try:
@@ -523,7 +488,7 @@ def _fetch_compounds(pdb_id):
             logger.debug(f"Error fetching SMILES for ligand {lig['comp_id']}: {e}")
             continue
 
-    logger.info(f"Added {len(seen_smiles) - (len(compounds) - len(seen_smiles))} PDB ligands")
+    logger.info(f"Added {len(compounds) - chembl_count} PDB ligands")
 
     if not compounds:
         logger.warning(f"No compounds found for {pdb_id}")
@@ -578,12 +543,12 @@ def _apply_rule_of_5(compounds_state):
         hbd = Descriptors.NumHDonors(mol)
         hba = Descriptors.NumHAcceptors(mol)
 
-        violations = sum([
+        violations = sum((
             mw > 500,
             logp > 5,
             hbd > 5,
             hba > 10,
-        ])
+        ))
 
         c["mw"] = round(mw, 1)
         c["logp"] = round(logp, 2)
@@ -724,15 +689,13 @@ def _fetch_pdb_file(pdb_id: str) -> str:
 
 def _find_binding_center(pdb_text: str) -> tuple[float, float, float]:
     """Find binding site center from co-crystallized ligand."""
-    skip = {"HOH", "WAT", "SO4", "PO4", "GOL", "EDO", "PEG", "DMS", "ACT",
-            "CL", "NA", "MG", "ZN", "CA", "K", "FMT", "IOD"}
     residue_coords = {}
 
     for line in pdb_text.splitlines():
         if not line.startswith("HETATM"):
             continue
         res_name = line[17:20].strip()
-        if res_name in skip:
+        if res_name in _SKIP_LIGANDS or res_name in ("WAT", "K"):
             continue
         try:
             x, y, z = float(line[30:38]), float(line[38:46]), float(line[46:54])
@@ -1144,7 +1107,6 @@ def _populate_compound_selector(final_state):
     return pd.DataFrame(rows)
 
 
-
 def _ai_explain_protein(protein_state):
     """AI-generated deep dive on the protein target."""
     logger.info("=== Generating AI protein deep dive ===")
@@ -1160,7 +1122,7 @@ def _ai_explain_protein(protein_state):
     p = protein_state
     logger.info(f"Generating protein deep dive for {p['pdb_id']}")
     lig_str = (
-        ", ".join(f"{l['comp_id']} ({l['name']})" for l in p.get("ligands", []))
+        ", ".join(f"{lig['comp_id']} ({lig['name']})" for lig in p.get("ligands", []))
         or "none"
     )
 
@@ -1257,6 +1219,14 @@ def create_tab():
                     )
                 with gr.Column(scale=1):
                     viewer_html = gr.HTML(value=_VIEWER_PLACEHOLDER)
+            explain_protein_btn = gr.Button(
+                "AI: Deep Dive on Protein", variant="secondary"
+            )
+            protein_deep_dive = gr.Textbox(
+                label="AI Protein Deep Dive",
+                interactive=False,
+                lines=12,
+            )
 
         # Step 2: Compound Discovery
         compounds_status = gr.Markdown(value="**Step 2 – Compounds:** Not started")
@@ -1393,7 +1363,12 @@ def create_tab():
             outputs=[detail_text, detail_image, selected_state],
         )
 
-        # AI explanation
+        # AI explanations
+        explain_protein_btn.click(
+            _ai_explain_protein,
+            inputs=[protein_state],
+            outputs=[protein_deep_dive],
+        )
         explain_compound_btn.click(
             _ai_explain_compound,
             inputs=[selected_state, protein_state],
