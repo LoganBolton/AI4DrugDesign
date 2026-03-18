@@ -1321,7 +1321,7 @@ def create_tab():
             )
             num_dock_input = gr.Number(
                 label="Compounds to Dock",
-                value=20,
+                value=10,
                 minimum=1,
                 maximum=500,
                 step=1,
@@ -1380,16 +1380,26 @@ def create_tab():
                     max_height=300,
                 )
 
-        # Pipeline filter status
-        ro5_status = gr.Textbox(
-            label="Step 3: Rule of 5", interactive=False, lines=1, value="Not started"
-        )
-        rank_status = gr.Textbox(
-            label="Step 4: AutoDock Vina Docking", interactive=False, lines=1, value="Not started"
-        )
-        adme_status = gr.Textbox(
-            label="Step 5: ADME Filter", interactive=False, lines=1, value="Not started"
-        )
+        # Step 3: Rule of 5
+        with gr.Accordion("Step 3: Rule of 5 Filter", open=False):
+            ro5_status = gr.Textbox(
+                label="Status", interactive=False, lines=1, value="Not started"
+            )
+            ro5_table = gr.Dataframe(interactive=False, wrap=True, max_height=300)
+
+        # Step 4: AutoDock Vina Docking
+        with gr.Accordion("Step 4: AutoDock Vina Docking", open=False):
+            rank_status = gr.Textbox(
+                label="Status", interactive=False, lines=1, value="Not started"
+            )
+            rank_table = gr.Dataframe(interactive=False, wrap=True, max_height=300)
+
+        # Step 5: ADME Filter
+        with gr.Accordion("Step 5: ADME Filter", open=False):
+            adme_status = gr.Textbox(
+                label="Status", interactive=False, lines=1, value="Not started"
+            )
+            adme_table = gr.Dataframe(interactive=False, wrap=True, max_height=300)
 
         # ────────────────────────────────────────────────────────
         # Results — Compound Detail
@@ -1429,37 +1439,6 @@ def create_tab():
         )
 
         # ────────────────────────────────────────────────────────
-        # Advanced Manual Control (Optional)
-        # ────────────────────────────────────────────────────────
-        with gr.Accordion("⚙️ Advanced: Manual Step Control & Detailed Tables", open=False):
-            gr.Markdown(
-                "Use these buttons to run individual pipeline steps manually. "
-                "Results appear in the Pipeline Progress section above."
-            )
-
-            gr.Markdown("### Step 1 & 2: Protein Analysis + Compound Discovery")
-            analyze_btn = gr.Button(
-                "Run Step 1 & 2 Only",
-                variant="secondary",
-                size="sm",
-            )
-
-            gr.Markdown("### Step 3: Rule of 5 Filter")
-            ro5_btn = gr.Button("Run Rule of 5 Filter", variant="secondary", size="sm")
-            with gr.Accordion("Intermediate: Rule of 5 Results Table", open=False):
-                ro5_table = gr.Dataframe(interactive=False, max_height=250)
-
-            gr.Markdown("### Step 4: AutoDock Vina Docking")
-            rank_btn = gr.Button("Run Vina Docking", variant="secondary", size="sm")
-            with gr.Accordion("Intermediate: Docking Results Table", open=False):
-                rank_table = gr.Dataframe(interactive=False, max_height=250)
-
-            gr.Markdown("### Step 5: ADME Filter")
-            adme_btn = gr.Button("Run ADME Filter", variant="secondary", size="sm")
-            with gr.Accordion("Intermediate: ADME Results Table", open=False):
-                adme_table = gr.Dataframe(interactive=False, max_height=250)
-
-        # ────────────────────────────────────────────────────────
         # Wire events
         # ────────────────────────────────────────────────────────
 
@@ -1486,46 +1465,6 @@ def create_tab():
                 adme_table,
                 compound_selector,
             ],
-        )
-
-        # Advanced: Individual step buttons
-        analyze_btn.click(
-            _run_protein_and_compounds_parallel,
-            inputs=[pdb_input],
-            outputs=[
-                protein_status,
-                protein_text,
-                protein_state,
-                viewer_html,
-                compounds_status,
-                all_compounds_state,
-                compounds_table,
-            ],
-        )
-
-        # Advanced: Step 3
-        ro5_btn.click(
-            _apply_rule_of_5,
-            inputs=[all_compounds_state],
-            outputs=[ro5_status, ro5_state, ro5_table],
-        )
-
-        # Step 4
-        rank_btn.click(
-            _rank_by_activity,
-            inputs=[ro5_state, protein_state, num_dock_input],
-            outputs=[rank_status, ranked_state, rank_table],
-        )
-
-        # Step 5
-        adme_btn.click(
-            _apply_adme_filter,
-            inputs=[ranked_state],
-            outputs=[adme_status, final_state, adme_table],
-        ).then(
-            _populate_compound_selector,
-            inputs=[final_state],
-            outputs=[compound_selector],
         )
 
         # Compound selection & detail (dropdown selector)
