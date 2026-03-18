@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import tempfile
 import urllib.request
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from urllib.error import HTTPError
 
 import gradio as gr
@@ -244,61 +244,97 @@ def _run_protein_and_compounds_parallel(pdb_id):
 
 
 def _run_complete_pipeline(pdb_id, num_dock=20):
-    """Run the entire drug discovery pipeline from start to finish."""
+    """Run the entire pipeline as a generator for progressive UI updates."""
+    num_dock = int(num_dock)
     logger.info("=" * 70)
     logger.info("=== STARTING COMPLETE DRUG DISCOVERY PIPELINE ===")
     logger.info(f"=== PDB ID: {pdb_id}, Docking: {num_dock} compounds ===")
     logger.info("=" * 70)
 
-    # Step 1 & 2: Protein analysis + Compound discovery (parallel)
-    logger.info("PIPELINE: Step 1 & 2 - Protein Analysis + Compound Discovery")
-    (protein_status, protein_text, protein_state, viewer_html,
-     compounds_status, all_compounds_state, compounds_table) = \
-        _run_protein_and_compounds_parallel(pdb_id)
-
-    # Step 3: Rule of 5 filter
-    logger.info("PIPELINE: Step 3 - Rule of 5 Filter")
-    ro5_status, ro5_state, ro5_table = _apply_rule_of_5(all_compounds_state)
-
-    # Step 4: AutoDock Vina docking
-    logger.info("PIPELINE: Step 4 - AutoDock Vina Docking")
-    rank_status, ranked_state, rank_table = _rank_by_activity(
-        ro5_state, protein_state, num_dock
+    # Current state of all 17 outputs — updated progressively
+    o = dict(
+        protein_status="**Protein:** 🔄 Analyzing...",
+        protein_text="",
+        protein_state=None,
+        viewer_html=_VIEWER_PLACEHOLDER,
+        compounds_status="**Compounds:** 🔄 Fetching from ChEMBL...",
+        all_compounds_state=None,
+        compounds_table=None,
+        ro5_status="**Step 3 – Rule of 5:** ⏳ Waiting...",
+        ro5_state=None,
+        ro5_table=None,
+        rank_status="**Step 4 – Docking:** ⏳ Waiting...",
+        ranked_state=None,
+        rank_table=None,
+        adme_status="**Step 5 – ADME:** ⏳ Waiting...",
+        final_state=None,
+        adme_table=None,
+        compound_selector=gr.Dropdown(choices=[], value=None),
     )
+    _keys = [
+        "protein_status", "protein_text", "protein_state", "viewer_html",
+        "compounds_status", "all_compounds_state", "compounds_table",
+        "ro5_status", "ro5_state", "ro5_table",
+        "rank_status", "ranked_state", "rank_table",
+        "adme_status", "final_state", "adme_table",
+        "compound_selector",
+    ]
 
-    # Step 5: ADME filter
+    def _snap():
+        return tuple(o[k] for k in _keys)
+
+    # Show initial "running" state
+    yield _snap()
+
+    # ── Steps 1 & 2: Protein + Compounds in parallel ──
+    logger.info("PIPELINE: Steps 1 & 2 - Protein Analysis + Compound Discovery")
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = {
+            executor.submit(_analyze_protein, pdb_id): "protein",
+            executor.submit(_fetch_compounds, pdb_id): "compounds",
+        }
+        for future in as_completed(futures):
+            if futures[future] == "protein":
+                (o["protein_status"], o["protein_text"],
+                 o["protein_state"], o["viewer_html"]) = future.result()
+            else:
+                (o["compounds_status"], o["all_compounds_state"],
+                 o["compounds_table"]) = future.result()
+            yield _snap()
+
+    # ── Step 3: Rule of 5 ──
+    o["ro5_status"] = "**Step 3 – Rule of 5:** 🔄 Filtering..."
+    yield _snap()
+
+    logger.info("PIPELINE: Step 3 - Rule of 5 Filter")
+    o["ro5_status"], o["ro5_state"], o["ro5_table"] = \
+        _apply_rule_of_5(o["all_compounds_state"])
+    yield _snap()
+
+    # ── Step 4: Docking ──
+    o["rank_status"] = "**Step 4 – Docking:** 🔄 Running AutoDock Vina..."
+    yield _snap()
+
+    logger.info("PIPELINE: Step 4 - AutoDock Vina Docking")
+    o["rank_status"], o["ranked_state"], o["rank_table"] = \
+        _rank_by_activity(o["ro5_state"], o["protein_state"], num_dock)
+    yield _snap()
+
+    # ── Step 5: ADME ──
+    o["adme_status"] = "**Step 5 – ADME:** 🔄 Filtering..."
+    yield _snap()
+
     logger.info("PIPELINE: Step 5 - ADME Filter")
-    adme_status, final_state, adme_table = _apply_adme_filter(ranked_state)
-
-    # Step 6: Populate compound selector
-    logger.info("PIPELINE: Step 6 - Populating Compound Selector")
-    compound_selector_update = _populate_compound_selector(final_state)
+    o["adme_status"], o["final_state"], o["adme_table"] = \
+        _apply_adme_filter(o["ranked_state"])
+    o["compound_selector"] = _populate_compound_selector(o["final_state"])
 
     logger.info("=" * 70)
     logger.info("=== COMPLETE PIPELINE FINISHED ===")
-    logger.info(f"=== Final compounds: {len(final_state) if final_state else 0} ===")
+    logger.info(f"=== Final compounds: {len(o['final_state']) if o['final_state'] else 0} ===")
     logger.info("=" * 70)
 
-    # Return all outputs for UI update
-    return (
-        protein_status,
-        protein_text,
-        protein_state,
-        viewer_html,
-        compounds_status,
-        all_compounds_state,
-        compounds_table,
-        ro5_status,
-        ro5_state,
-        ro5_table,
-        rank_status,
-        ranked_state,
-        rank_table,
-        adme_status,
-        final_state,
-        adme_table,
-        compound_selector_update,
-    )
+    yield _snap()
 
 
 def _analyze_protein(pdb_id: str):
