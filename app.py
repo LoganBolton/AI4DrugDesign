@@ -4,12 +4,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 from tabs import (
-    chat,
-    compound_optimization,
-    compound_visualization,
-    molecular_docking,
-    protein_analysis,
-    protein_image_tab,
+    integrated_pipeline,
 )
 
 load_dotenv()
@@ -31,12 +26,8 @@ def chat_fn(message, history):
     return response.choices[0].message.content
 
 
-with gr.Blocks() as demo:
-    chat.create_tab()
-    protein_analysis.create_tab()
-    compound_optimization.create_tab()
-    compound_visualization.create_tab()
-    molecular_docking.create_tab()
-    protein_image_tab.create_tab()
+with gr.Blocks(css=".pending { opacity: 1 !important; }") as demo:
+    integrated_pipeline.create_tab()
 
-demo.launch()
+if __name__ == "__main__":
+    demo.launch()

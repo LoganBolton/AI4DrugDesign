@@ -1,0 +1,284 @@
+"""
+Integrated Drug Discovery Pipeline
+
+Single-page workflow:
+  1. Input Protein (PDB ID) → Analyze & 3D view
+  2. Discover Compounds (ChEMBL)
+  3. Filter: Rule of 5
+  4. Rank: Binding Activity (experimental data)
+  5. Filter: ADME scores
+  6. Select compound → Detail view + AI explanation
+"""
+
+from concurrent.futures import ThreadPoolExecutor
+
+import gradio as gr
+
+from tabs.pipeline.compounds import fetch_compounds
+from tabs.pipeline.detail import (
+    ai_explain_compound,
+    on_select_compound,
+    populate_compound_selector,
+)
+from tabs.pipeline.docking import rank_by_activity
+from tabs.pipeline.filters import apply_adme_filter, apply_rule_of_5
+from tabs.pipeline.helpers import logger
+from tabs.pipeline.protein import (
+    VIEWER_PLACEHOLDER,
+    ai_explain_protein,
+    analyze_protein,
+)
+
+
+# ── Orchestration helpers ─────────────────────────────────────────────
+
+
+def _run_protein_and_compounds_parallel(pdb_id):
+    """Run protein analysis and compound discovery in parallel."""
+    logger.info("=== Starting parallel execution: Protein Analysis + Compound Discovery ===")
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        protein_future = executor.submit(analyze_protein, pdb_id)
+        compound_future = executor.submit(fetch_compounds, pdb_id)
+
+        protein_results = protein_future.result()
+        compound_results = compound_future.result()
+
+    logger.info("=== Parallel execution complete ===")
+
+    # protein_results: (status, text, info, viewer)
+    # compound_results: (status, compounds, table)
+    return (*protein_results, *compound_results)
+
+
+def _pipeline_initial_status():
+    """Reset UI and set all step statuses to their initial running/waiting state."""
+    return (
+        "**Step 1 – Protein:** 🔄 Analyzing structure from RCSB PDB...",
+        "**Step 2 – Compounds:** 🔄 Fetching from ChEMBL...",
+        "**Step 3 – Rule of 5:** ⏳ Waiting...",
+        "**Step 4 – Docking:** ⏳ Waiting...",
+        "**Step 5 – ADME:** ⏳ Waiting...",
+        "",     # clear detail text
+        None,   # clear detail image
+        "",     # clear AI explanation
+    )
+
+
+# ── UI ─────────────────────────────────────────────────────────────────
+
+
+def create_tab():
+    with gr.Tab("Drug Discovery Pipeline"):
+        # --- State ---
+        protein_state = gr.State(None)
+        all_compounds_state = gr.State(None)
+        ro5_state = gr.State(None)
+        ranked_state = gr.State(None)
+        final_state = gr.State(None)
+        selected_state = gr.State(None)
+
+        # ────────────────────────────────────────────────────────
+        # Main Input & Run Button
+        # ────────────────────────────────────────────────────────
+        gr.Markdown(
+            "## Quick Start: Run Complete Pipeline\n"
+            "Enter a PDB ID and click the button below to run the entire pipeline automatically."
+        )
+
+        with gr.Row():
+            pdb_input = gr.Textbox(
+                label="PDB ID",
+                placeholder="e.g., 6LU7",
+                lines=1,
+                scale=2,
+            )
+            num_dock_input = gr.Number(
+                label="Compounds to Dock",
+                value=10,
+                minimum=1,
+                maximum=500,
+                step=1,
+                scale=1,
+            )
+
+        run_pipeline_btn = gr.Button(
+            "🚀 Run Complete Pipeline",
+            variant="primary",
+            size="lg",
+        )
+
+        gr.Examples(
+            examples=[["6LU7"], ["1IEP"], ["2HYY"], ["3ERT"]],
+            inputs=pdb_input,
+        )
+
+        gr.Markdown("---\n## Pipeline Progress")
+
+        # Step 1: Protein Analysis
+        protein_status = gr.Markdown(value="**Step 1 – Protein:** Not started")
+        with gr.Accordion("Step 1: Protein Details", open=False):
+            with gr.Row():
+                with gr.Column(scale=1):
+                    protein_text = gr.Textbox(
+                        label="Protein Information & AI Analysis",
+                        interactive=False,
+                        lines=20,
+                    )
+                with gr.Column(scale=1):
+                    viewer_html = gr.HTML(value=VIEWER_PLACEHOLDER)
+            explain_protein_btn = gr.Button(
+                "AI: Deep Dive on Protein", variant="secondary"
+            )
+            protein_deep_dive = gr.Textbox(
+                label="AI Protein Deep Dive",
+                interactive=False,
+                lines=12,
+            )
+
+        # Step 2: Compound Discovery
+        compounds_status = gr.Markdown(value="**Step 2 – Compounds:** Not started")
+        with gr.Accordion("Step 2: Discovered Compounds", open=False):
+            compounds_table = gr.Dataframe(
+                label="Compounds from ChEMBL",
+                interactive=False,
+                wrap=True,
+                max_height=300,
+            )
+
+        # Step 3: Rule of 5
+        ro5_status = gr.Markdown(value="**Step 3 – Rule of 5:** Not started")
+        with gr.Accordion("Step 3: Rule of 5 Results", open=False):
+            ro5_table = gr.Dataframe(
+                label="Rule of 5 Filtered Compounds",
+                interactive=False, wrap=True, max_height=300,
+            )
+
+        # Step 4: AutoDock Vina Docking
+        rank_status = gr.Markdown(value="**Step 4 – Docking:** Not started")
+        with gr.Accordion("Step 4: Docking Results", open=False):
+            rank_table = gr.Dataframe(
+                label="Docking Ranked Compounds",
+                interactive=False, wrap=True, max_height=300,
+            )
+
+        # Step 5: ADME Filter
+        adme_status = gr.Markdown(value="**Step 5 – ADME:** Not started")
+        with gr.Accordion("Step 5: ADME Results", open=False):
+            adme_table = gr.Dataframe(
+                label="ADME Filtered Compounds",
+                interactive=False, wrap=True, max_height=300,
+            )
+
+        # ────────────────────────────────────────────────────────
+        # Results — Compound Detail
+        # ────────────────────────────────────────────────────────
+        gr.Markdown(
+            "---\n## Final Results: Most Relevant Compounds"
+        )
+
+        compound_selector = gr.Dataframe(
+            label="Click a row to view details",
+            interactive=False,
+            wrap=True,
+            max_height=250,
+        )
+
+        with gr.Row():
+            with gr.Column(scale=1):
+                detail_text = gr.Textbox(
+                    label="Compound Properties",
+                    interactive=False,
+                    lines=22,
+                )
+            with gr.Column(scale=1):
+                detail_image = gr.Image(
+                    label="2D Structure",
+                    type="pil",
+                    height=400,
+                )
+        explain_compound_btn = gr.Button(
+            "AI: Explain This Compound", variant="secondary", size="lg"
+        )
+        compound_explanation = gr.Textbox(
+            label="AI Compound Analysis",
+            interactive=False,
+            lines=15,
+        )
+
+        # ────────────────────────────────────────────────────────
+        # Wire events
+        # ────────────────────────────────────────────────────────
+
+        # Main "Run Complete Pipeline" — chained steps for progressive updates
+        _progress_args = dict(show_progress="hidden")
+
+        run_pipeline_btn.click(
+            _pipeline_initial_status,
+            outputs=[protein_status, compounds_status,
+                     ro5_status, rank_status, adme_status,
+                     detail_text, detail_image, compound_explanation],
+            **_progress_args,
+        ).then(
+            _run_protein_and_compounds_parallel,
+            inputs=[pdb_input],
+            outputs=[protein_status, protein_text, protein_state, viewer_html,
+                     compounds_status, all_compounds_state, compounds_table],
+            **_progress_args,
+        ).then(
+            lambda: "**Step 3 – Rule of 5:** 🔄 Filtering...",
+            outputs=[ro5_status],
+            **_progress_args,
+        ).then(
+            apply_rule_of_5,
+            inputs=[all_compounds_state],
+            outputs=[ro5_status, ro5_state, ro5_table],
+            **_progress_args,
+        ).then(
+            lambda: "**Step 4 – Docking:** 🔄 Running AutoDock Vina...",
+            outputs=[rank_status],
+            **_progress_args,
+        ).then(
+            rank_by_activity,
+            inputs=[ro5_state, protein_state, num_dock_input],
+            outputs=[rank_status, ranked_state, rank_table],
+            **_progress_args,
+        ).then(
+            lambda: "**Step 5 – ADME:** 🔄 Filtering...",
+            outputs=[adme_status],
+            **_progress_args,
+        ).then(
+            apply_adme_filter,
+            inputs=[ranked_state],
+            outputs=[adme_status, final_state, adme_table],
+            **_progress_args,
+        ).then(
+            populate_compound_selector,
+            inputs=[final_state],
+            outputs=[compound_selector],
+            **_progress_args,
+        )
+
+        # Compound selection — click a row in either table
+        compound_selector.select(
+            on_select_compound,
+            inputs=[final_state],
+            outputs=[detail_text, detail_image, selected_state],
+        )
+        adme_table.select(
+            on_select_compound,
+            inputs=[final_state],
+            outputs=[detail_text, detail_image, selected_state],
+        )
+
+        # AI explanations
+        explain_protein_btn.click(
+            ai_explain_protein,
+            inputs=[protein_state],
+            outputs=[protein_deep_dive],
+        )
+        explain_compound_btn.click(
+            ai_explain_compound,
+            inputs=[selected_state, protein_state],
+            outputs=[compound_explanation],
+        )
