@@ -1,1 +1,0 @@
-I want the Step 1: Protein Input & Analysis to run async. So you input the protein and it will the analysis by itself with blocking anything. It should then be fed into the discover compounds so that it it discovers all relevant compounds first. 
