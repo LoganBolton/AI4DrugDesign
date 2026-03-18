@@ -26,7 +26,7 @@ def chat_fn(message, history):
     return response.choices[0].message.content
 
 
-with gr.Blocks() as demo:
+with gr.Blocks(css=".pending { opacity: 1 !important; }") as demo:
     integrated_pipeline.create_tab()
 
 if __name__ == "__main__":
