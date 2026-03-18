@@ -105,7 +105,7 @@ def prepare_receptor_pdbqt(pdb_path: str, output_path: str) -> None:
         raise Exception("mk_prepare_receptor not found. Install with: pip install meeko")
 
     output_basename = output_path.removesuffix(".pdbqt")
-    cmd = [mk_script, "-i", cleaned_path, "-o", output_basename, "-p"]
+    cmd = [mk_script, "-i", cleaned_path, "-o", output_basename, "-p", "--allow_bad_res", "--default_altloc", "A"]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
 
     if result.returncode != 0:

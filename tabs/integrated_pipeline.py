@@ -109,7 +109,7 @@ def create_tab():
         )
 
         gr.Examples(
-            examples=[["6LU7"], ["1IEP"], ["2HYY"], ["1AZ5"]],
+            examples=[["6LU7"], ["1IEP"], ["2HYY"], ["3ERT"]],
             inputs=pdb_input,
         )
 
