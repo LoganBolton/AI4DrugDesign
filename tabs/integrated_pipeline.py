@@ -1292,10 +1292,6 @@ def _ai_explain_protein(protein_state):
 
 def create_tab():
     with gr.Tab("Drug Discovery Pipeline"):
-        gr.Markdown(
-            "# Integrated Drug Discovery Pipeline\n"
-        )
-
         # --- State ---
         protein_state = gr.State(None)
         all_compounds_state = gr.State(None)
@@ -1339,46 +1335,36 @@ def create_tab():
             inputs=pdb_input,
         )
 
-        gr.Markdown(
-            "_Pipeline: Protein Analysis + Compound Discovery → Rule of 5 → "
-            "AutoDock Vina Docking → ADME Filter → Results_"
-        )
-
-        # ────────────────────────────────────────────────────────
-        # Pipeline Progress & Intermediate Results
-        # ────────────────────────────────────────────────────────
         gr.Markdown("---\n## Pipeline Progress")
 
-        # Step 1 & 2 Results
-        with gr.Accordion("Step 1 & 2: Protein Details & Discovered Compounds", open=True):
+        # Step 1: Protein Analysis
+        with gr.Accordion("Step 1: Protein Analysis", open=False):
+            protein_status = gr.Markdown(
+                value="**Protein:** Not started",
+                visible=True,
+            )
             with gr.Row():
-                protein_status = gr.Markdown(
-                    value="**Protein:** Not started",
-                    visible=True,
-                )
-                compounds_status = gr.Markdown(
-                    value="**Compounds:** Not started",
-                    visible=True,
-                )
+                with gr.Column(scale=1):
+                    protein_text = gr.Textbox(
+                        label="Protein Information & AI Analysis",
+                        interactive=False,
+                        lines=20,
+                    )
+                with gr.Column(scale=1):
+                    viewer_html = gr.HTML(value=_VIEWER_PLACEHOLDER)
 
-            with gr.Accordion("Protein Information & 3D Structure", open=False):
-                with gr.Row():
-                    with gr.Column(scale=1):
-                        protein_text = gr.Textbox(
-                            label="Protein Information & AI Analysis",
-                            interactive=False,
-                            lines=20,
-                        )
-                    with gr.Column(scale=1):
-                        viewer_html = gr.HTML(value=_VIEWER_PLACEHOLDER)
-
-            with gr.Accordion("All Discovered Compounds (Unfiltered)", open=False):
-                compounds_table = gr.Dataframe(
-                    label="Compounds from ChEMBL",
-                    interactive=False,
-                    wrap=True,
-                    max_height=300,
-                )
+        # Step 2: Compound Discovery
+        with gr.Accordion("Step 2: Compound Discovery", open=False):
+            compounds_status = gr.Markdown(
+                value="**Compounds:** Not started",
+                visible=True,
+            )
+            compounds_table = gr.Dataframe(
+                label="Compounds from ChEMBL",
+                interactive=False,
+                wrap=True,
+                max_height=300,
+            )
 
         # Step 3: Rule of 5
         with gr.Accordion("Step 3: Rule of 5 Filter", open=False):
@@ -1405,7 +1391,7 @@ def create_tab():
         # Results — Compound Detail
         # ────────────────────────────────────────────────────────
         gr.Markdown(
-            "---\n## Final Results: Select Compound to View Details"
+            "---\n## Final Results: Most Relevant Compounds"
         )
 
         compound_selector = gr.Dropdown(
