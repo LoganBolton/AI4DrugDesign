@@ -244,13 +244,16 @@ def _run_protein_and_compounds_parallel(pdb_id):
 
 
 def _pipeline_initial_status():
-    """Set all step statuses to their initial running/waiting state."""
+    """Reset UI and set all step statuses to their initial running/waiting state."""
     return (
         "**Step 1 – Protein:** 🔄 Analyzing structure from RCSB PDB...",
         "**Step 2 – Compounds:** 🔄 Fetching from ChEMBL...",
         "**Step 3 – Rule of 5:** ⏳ Waiting...",
         "**Step 4 – Docking:** ⏳ Waiting...",
         "**Step 5 – ADME:** ⏳ Waiting...",
+        "",     # clear detail text
+        None,   # clear detail image
+        "",     # clear AI explanation
     )
 
 
@@ -1118,77 +1121,28 @@ def _ai_explain_compound(selected_state, protein_state):
 
 
 def _populate_compound_selector(final_state):
-    """Populate dropdown with compound choices after ADME filter."""
+    """Build a summary table of final compounds for selection."""
     if not final_state:
-        return gr.Dropdown(choices=[], value=None)
+        return None
 
-    # Create choices as list of tuples: (display_name, index)
-    choices = []
-    for i, compound in enumerate(final_state):
-        # Display format: "Rank 1: CHEMBL123 (Name) - Vina: -8.5"
-        vina_score = compound.get("vina_affinity", "N/A")
-        vina_str = f"{vina_score:.2f}" if isinstance(vina_score, (int, float)) and vina_score != float('inf') else "N/A"
+    rows = []
+    for c in final_state:
+        vina = c.get("vina_affinity")
+        rows.append({
+            "Rank": c.get("binding_rank", ""),
+            "Name": c["name"][:25],
+            "Vina (kcal/mol)": (
+                f"{vina:.2f}" if isinstance(vina, (int, float)) and vina != float("inf")
+                else "N/A"
+            ),
+            "ADME": f"{c.get('adme_score', '?')}/6",
+            "MW": c.get("mw", ""),
+            "LogP": c.get("logp", ""),
+        })
 
-        display_name = (
-            f"Rank {compound.get('binding_rank', i+1)}: "
-            f"{compound.get('chembl_id', 'N/A')} ({compound.get('name', 'Unknown')[:30]}) - "
-            f"Vina: {vina_str} kcal/mol, ADME: {compound.get('adme_score', 'N/A')}/6"
-        )
-        choices.append((display_name, i))
+    logger.info(f"Populated compound selector with {len(rows)} compounds")
+    return pd.DataFrame(rows)
 
-    logger.info(f"Populated compound selector with {len(choices)} compounds")
-    return gr.Dropdown(choices=choices, value=None if not choices else choices[0][1])
-
-
-def _on_compound_selected(selected_idx, final_state):
-    """Handle compound selection from dropdown."""
-    if final_state is None or selected_idx is None:
-        logger.warning("Compound selection attempted with no compounds or index")
-        return "No compound selected.", None, None
-
-    if selected_idx >= len(final_state):
-        logger.warning(f"Invalid compound index selected: {selected_idx}")
-        return "Invalid selection.", None, None
-
-    compound = final_state[selected_idx]
-    smiles = compound["smiles"]
-    logger.info(f"Selected compound: {compound.get('name')} (ChEMBL: {compound.get('chembl_id')})")
-
-    # Build detailed information text
-    detail = (
-        f"{'=' * 50}\n"
-        f"  COMPOUND: {compound['name']}\n"
-        f"{'=' * 50}\n"
-        f"ChEMBL ID        : {compound.get('chembl_id', 'N/A')}\n"
-        f"SMILES           : {smiles}\n\n"
-        f"PROPERTIES:\n"
-        f"  Molecular Weight : {compound.get('mw', 'N/A')}\n"
-        f"  LogP             : {compound.get('logp', 'N/A')}\n"
-        f"  H-Bond Donors    : {compound.get('hbd', 'N/A')}\n"
-        f"  H-Bond Acceptors : {compound.get('hba', 'N/A')}\n"
-        f"  TPSA             : {compound.get('tpsa', 'N/A')}\n"
-        f"  Rotatable Bonds  : {compound.get('rot_bonds', 'N/A')}\n\n"
-        f"BINDING DATA:\n"
-        f"  Vina Affinity : {compound.get('vina_affinity', 'N/A')} kcal/mol\n"
-        f"  Assay Type    : {compound.get('activity_type', 'N/A')}\n"
-        f"  Value         : {compound.get('activity_value', 'N/A')} "
-        f"{compound.get('activity_units', '')}\n\n"
-        f"FILTERS:\n"
-        f"  Rule of 5  : "
-        f"{'Pass' if compound.get('ro5_pass') else 'Fail'} "
-        f"({compound.get('ro5_violations', '?')} violations)\n"
-        f"  ADME Score : {compound.get('adme_score', 'N/A')}/6\n"
-        f"{'=' * 50}"
-    )
-
-    # Generate 2D structure image
-    mol = Chem.MolFromSmiles(smiles)
-    img = None
-    if mol:
-        AllChem.Compute2DCoords(mol)
-        img = Draw.MolToImage(mol, size=(400, 400))
-
-    return detail, img, compound
 
 
 def _ai_explain_protein(protein_state):
@@ -1345,12 +1299,11 @@ def create_tab():
             "---\n## Final Results: Most Relevant Compounds"
         )
 
-        compound_selector = gr.Dropdown(
-            label="Select Compound to View Details",
-            choices=[],
-            value=None,
-            interactive=True,
-            scale=2,
+        compound_selector = gr.Dataframe(
+            label="Click a row to view details",
+            interactive=False,
+            wrap=True,
+            max_height=250,
         )
 
         with gr.Row():
@@ -1385,7 +1338,8 @@ def create_tab():
         run_pipeline_btn.click(
             _pipeline_initial_status,
             outputs=[protein_status, compounds_status,
-                     ro5_status, rank_status, adme_status],
+                     ro5_status, rank_status, adme_status,
+                     detail_text, detail_image, compound_explanation],
             **_progress_args,
         ).then(
             _run_protein_and_compounds_parallel,
@@ -1427,14 +1381,12 @@ def create_tab():
             **_progress_args,
         )
 
-        # Compound selection & detail (dropdown selector)
-        compound_selector.change(
-            _on_compound_selected,
-            inputs=[compound_selector, final_state],
+        # Compound selection — click a row in either table
+        compound_selector.select(
+            _on_select_compound,
+            inputs=[final_state],
             outputs=[detail_text, detail_image, selected_state],
         )
-
-        # Alternative: table row selection (still works)
         adme_table.select(
             _on_select_compound,
             inputs=[final_state],
