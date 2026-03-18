@@ -1,59 +1,55 @@
-# AI4DrugDesign_Spring2026
+# AI4DrugDesign Spring 2026
 
-A simple Gradio-based application for AI4DrugDesign course.
+Interactive drug discovery pipeline built with Gradio. Enter a PDB protein ID and the app runs: protein analysis with 3D visualization, compound discovery from ChEMBL, Lipinski Rule of 5 filtering, molecular docking with AutoDock Vina, and ADME filtering.
 
-## Installation
+## Setup
 
-1. **Install uv** (if not already installed):
+### macOS
 
-   **macOS/Linux:**
-   ```bash
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   ```
-
-   **Windows (PowerShell):**
-   ```powershell
-   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-   ```
-
-   After installation, restart your terminal or run:
-   - macOS/Linux: `source $HOME/.local/bin/env` or `source $HOME/.cargo/env`
-   - Windows: Restart PowerShell
-
-   Verify installation:
-   ```bash
-   uv --version
-   ```
-
-
-2. **Install system build dependencies** (required to compile AutoDock Vina):
-
-   **macOS (Homebrew):**
+1. Install [Homebrew](https://brew.sh) if you don't have it, then:
    ```bash
    brew install swig boost
    ```
 
-   **Ubuntu/Debian:**
+2. Install [uv](https://docs.astral.sh/uv/):
    ```bash
-   sudo apt install swig libboost-all-dev
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+   Restart your terminal after installing.
+
+3. Install dependencies:
+   ```bash
+   export CPLUS_INCLUDE_PATH="$(brew --prefix boost)/include"
+   export LIBRARY_PATH="$(brew --prefix boost)/lib"
+   uv sync
    ```
 
-3. **Install dependencies**:
+### Windows
+
+1. Open PowerShell as administrator and run:
+   ```powershell
+   wsl --install
+   ```
+   Restart your computer when prompted.
+
+2. Open the **Ubuntu** app from the Start menu. It will ask you to create a username and password (this is just for the Linux environment).
+
+3. Inside the Ubuntu terminal, install uv:
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   source $HOME/.local/bin/env
+   ```
+
+4. Install dependencies:
    ```bash
    uv sync
    ```
-   This will:
-   - Create a virtual environment in `.venv/`
-   - Install Python 3.12 (specified in `.python-version`)
-   - Install all dependencies from `pyproject.toml` (including AutoDock Vina)
+   No extra system libraries needed — Linux has pre-built AutoDock Vina packages.
 
-## Running the App
+## Running
 
 ```bash
 uv run python app.py
 ```
 
-To activate the virtual environment manually:
-- **macOS/Linux:** `source .venv/bin/activate`
-- **Windows (PowerShell):** `.venv\Scripts\Activate.ps1`
-- **Windows (CMD):** `.venv\Scripts\activate.bat`
+Opens at http://localhost:7860.
