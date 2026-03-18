@@ -605,7 +605,7 @@ def _apply_rule_of_5(compounds_state):
     logger.info("=== STEP 3: Applying Rule of 5 filter ===")
     if not compounds_state:
         logger.warning("No compounds provided for Rule of 5 filter")
-        return "No compounds to filter. Run Step 2 first.", None, None
+        return "**Step 3 – Rule of 5:** ❌ No compounds to filter", None, None
 
     total = len(compounds_state)
     logger.info(f"Filtering {total} compounds by Rule of 5")
@@ -696,7 +696,7 @@ def _apply_rule_of_5(compounds_state):
     # Calculate status message
     pct = (len(passed) / total * 100) if total > 0 else 0
     max_viol = max([c["ro5_violations"] for c in passed]) if passed else 0
-    status = f"Rule of 5: {len(passed)} of {total} compounds ({pct:.0f}%) — max {max_viol} violations"
+    status = f"**Step 3 – Rule of 5:** ✅ {len(passed)} of {total} compounds ({pct:.0f}%) — max {max_viol} violations"
 
     df = pd.DataFrame(rows) if rows else None
     logger.info(f"=== STEP 3 COMPLETE: {len(passed)}/{total} compounds passed Rule of 5 ===")
@@ -827,11 +827,11 @@ def _rank_by_activity(ro5_state, protein_info_state=None, num_dock=50):
     logger.info("=== STEP 4: Ranking by binding activity (AutoDock Vina) ===")
     if not ro5_state:
         logger.warning("No compounds provided for docking")
-        return "No compounds to rank. Run Step 3 first.", None, None
+        return "**Step 4 – Docking:** ❌ No compounds to rank", None, None
 
     if not protein_info_state:
         logger.error("No protein info for docking")
-        return "Protein info required for docking. Re-run Step 1.", None, None
+        return "**Step 4 – Docking:** ❌ No protein info", None, None
 
     total = len(ro5_state)
     pdb_id = protein_info_state["pdb_id"]
@@ -904,7 +904,7 @@ def _rank_by_activity(ro5_state, protein_info_state=None, num_dock=50):
 
     except Exception as e:
         logger.error(f"Docking failed: {e}")
-        return f"Docking failed: {e}", None, None
+        return f"**Step 4 – Docking:** ❌ {e}", None, None
 
     # Keep ONLY successfully docked compounds (discard undocked and failed)
     docked = [
@@ -940,7 +940,7 @@ def _rank_by_activity(ro5_state, protein_info_state=None, num_dock=50):
 
     successful_docks = len(ranked)
     failed_docks = num_dock - successful_docks
-    status = f"Successfully docked {successful_docks}/{num_dock} compounds with AutoDock Vina"
+    status = f"**Step 4 – Docking:** ✅ {successful_docks}/{num_dock} compounds docked with AutoDock Vina"
     if failed_docks > 0:
         status += f" ({failed_docks} failed and discarded)"
 
@@ -957,7 +957,7 @@ def _apply_adme_filter(docked_state):
     logger.info("=== STEP 5: Applying ADME filter ===")
     if not docked_state:
         logger.warning("No compounds provided for ADME filter")
-        return "No compounds to filter. Run Step 4 first.", None, None
+        return "**Step 5 – ADME:** ❌ No compounds to filter", None, None
 
     total = len(docked_state)
     logger.info(f"Filtering {total} compounds by ADME criteria")
@@ -1049,7 +1049,7 @@ def _apply_adme_filter(docked_state):
     min_score = min([c["adme_score"] for c in passed]) if passed else 0
     max_score = max([c["adme_score"] for c in passed]) if passed else 0
     status = (
-        f"ADME: {len(passed)} of {total} compounds ({pct:.0f}%) — "
+        f"**Step 5 – ADME:** ✅ {len(passed)} of {total} compounds ({pct:.0f}%) — "
         f"scores {min_score}-{max_score}/6"
     )
 
@@ -1367,25 +1367,28 @@ def create_tab():
             )
 
         # Step 3: Rule of 5
-        with gr.Accordion("Step 3: Rule of 5 Filter", open=False):
-            ro5_status = gr.Textbox(
-                label="Status", interactive=False, lines=1, value="Not started"
+        ro5_status = gr.Markdown(value="**Step 3 – Rule of 5:** Not started")
+        with gr.Accordion("Step 3: Rule of 5 Results", open=False):
+            ro5_table = gr.Dataframe(
+                label="Rule of 5 Filtered Compounds",
+                interactive=False, wrap=True, max_height=300,
             )
-            ro5_table = gr.Dataframe(interactive=False, wrap=True, max_height=300)
 
         # Step 4: AutoDock Vina Docking
-        with gr.Accordion("Step 4: AutoDock Vina Docking", open=False):
-            rank_status = gr.Textbox(
-                label="Status", interactive=False, lines=1, value="Not started"
+        rank_status = gr.Markdown(value="**Step 4 – Docking:** Not started")
+        with gr.Accordion("Step 4: Docking Results", open=False):
+            rank_table = gr.Dataframe(
+                label="Docking Ranked Compounds",
+                interactive=False, wrap=True, max_height=300,
             )
-            rank_table = gr.Dataframe(interactive=False, wrap=True, max_height=300)
 
         # Step 5: ADME Filter
-        with gr.Accordion("Step 5: ADME Filter", open=False):
-            adme_status = gr.Textbox(
-                label="Status", interactive=False, lines=1, value="Not started"
+        adme_status = gr.Markdown(value="**Step 5 – ADME:** Not started")
+        with gr.Accordion("Step 5: ADME Results", open=False):
+            adme_table = gr.Dataframe(
+                label="ADME Filtered Compounds",
+                interactive=False, wrap=True, max_height=300,
             )
-            adme_table = gr.Dataframe(interactive=False, wrap=True, max_height=300)
 
         # ────────────────────────────────────────────────────────
         # Results — Compound Detail
