@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import gradio as gr
 
+from tabs.compound_optimization import OPTIMIZATION_GOAL_OPTIONS, _optimize_compound
 from tabs.pipeline.compounds import fetch_compounds
 from tabs.pipeline.detail import (
     COMPOUND_3D_PLACEHOLDER,
@@ -200,7 +201,39 @@ def create_tab():
                     height=400,
                 )
 
-        # 3D Structure Viewer (below the 2D image row)
+        # ── Compound Optimization ──────────────────────────────
+        gr.Markdown("### Compound Optimization")
+        gr.Markdown(
+            "SMILES is auto-filled when you select a compound above, "
+            "or enter any SMILES manually."
+        )
+        with gr.Row():
+            with gr.Column(scale=1):
+                optim_smiles_input = gr.Textbox(
+                    label="Compound SMILES",
+                    placeholder="Select a compound above or enter SMILES manually",
+                    lines=3,
+                )
+                optim_goals_input = gr.CheckboxGroup(
+                    choices=OPTIMIZATION_GOAL_OPTIONS,
+                    label="Optimization Goals",
+                    info="Select one or more goals.",
+                )
+                optimize_btn = gr.Button("Optimize Compound", variant="secondary", size="lg")
+            with gr.Column(scale=1):
+                optim_output = gr.Textbox(
+                    label="Optimization Suggestions",
+                    interactive=False,
+                    lines=18,
+                    placeholder=(
+                        "a. Initial Properties of the Compound\n"
+                        "b. Suggested Structural Modifications\n"
+                        "c. Optimization Goal Mapping\n"
+                        "d. Drug-Likeness Considerations"
+                    ),
+                )
+
+        # 3D Structure Viewer
         gr.Markdown("### 3D Structure")
         compound_3d_viewer = gr.HTML(
             value=COMPOUND_3D_PLACEHOLDER,
@@ -268,16 +301,31 @@ def create_tab():
             **_progress_args,
         )
 
-        # Compound selection — click a row in either table
+        # Compound selection — click a row in either table, then auto-fill SMILES
         compound_selector.select(
             on_select_compound,
             inputs=[final_state],
             outputs=[detail_text, detail_image, compound_3d_viewer, selected_state],
+        ).then(
+            lambda c: c.get("smiles", "") if c else "",
+            inputs=[selected_state],
+            outputs=[optim_smiles_input],
         )
         adme_table.select(
             on_select_compound,
             inputs=[final_state],
             outputs=[detail_text, detail_image, compound_3d_viewer, selected_state],
+        ).then(
+            lambda c: c.get("smiles", "") if c else "",
+            inputs=[selected_state],
+            outputs=[optim_smiles_input],
+        )
+
+        # Compound optimization
+        optimize_btn.click(
+            lambda smiles, goals: _optimize_compound(smiles, goals)[0],
+            inputs=[optim_smiles_input, optim_goals_input],
+            outputs=[optim_output],
         )
 
         # AI explanations
