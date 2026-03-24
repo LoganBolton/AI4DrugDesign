@@ -16,6 +16,7 @@ import gradio as gr
 
 from tabs.pipeline.compounds import fetch_compounds
 from tabs.pipeline.detail import (
+    COMPOUND_3D_PLACEHOLDER,
     ai_explain_compound,
     on_select_compound,
     populate_compound_selector,
@@ -61,6 +62,7 @@ def _pipeline_initial_status():
         "**Step 5 – ADME:** ⏳ Waiting...",
         "",     # clear detail text
         None,   # clear detail image
+        COMPOUND_3D_PLACEHOLDER,  # reset 3D viewer
         "",     # clear AI explanation
     )
 
@@ -197,6 +199,13 @@ def create_tab():
                     type="pil",
                     height=400,
                 )
+
+        # 3D Structure Viewer (below the 2D image row)
+        gr.Markdown("### 3D Structure")
+        compound_3d_viewer = gr.HTML(
+            value=COMPOUND_3D_PLACEHOLDER,
+            label="3D Structure",
+        )
         explain_compound_btn = gr.Button(
             "AI: Explain This Compound", variant="secondary", size="lg"
         )
@@ -217,7 +226,7 @@ def create_tab():
             _pipeline_initial_status,
             outputs=[protein_status, compounds_status,
                      ro5_status, rank_status, adme_status,
-                     detail_text, detail_image, compound_explanation],
+                     detail_text, detail_image, compound_3d_viewer, compound_explanation],
             **_progress_args,
         ).then(
             _run_protein_and_compounds_parallel,
@@ -263,12 +272,12 @@ def create_tab():
         compound_selector.select(
             on_select_compound,
             inputs=[final_state],
-            outputs=[detail_text, detail_image, selected_state],
+            outputs=[detail_text, detail_image, compound_3d_viewer, selected_state],
         )
         adme_table.select(
             on_select_compound,
             inputs=[final_state],
-            outputs=[detail_text, detail_image, selected_state],
+            outputs=[detail_text, detail_image, compound_3d_viewer, selected_state],
         )
 
         # AI explanations
