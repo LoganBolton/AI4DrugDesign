@@ -83,7 +83,6 @@ def build_3d_compound_viewer_html(smiles: str, compound_name: str = "") -> str:
         "  });"
         "  viewer.zoomTo();"
         "  viewer.render();"
-        "  viewer.spin('y', 0.5);"
         "});"
         "</script>"
         "</body></html>"
