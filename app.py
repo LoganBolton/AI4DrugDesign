@@ -8,9 +8,9 @@ from tabs import (
 )
 
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def chat_fn(message, history):
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     messages = []
     for user_msg, assistant_msg in history:
         messages.append({"role": "user", "content": user_msg})

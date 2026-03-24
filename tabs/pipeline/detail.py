@@ -1,5 +1,7 @@
 """Step 6 — Compound detail view, selection handler, AI explanation."""
 
+import html as html_module
+
 import gradio as gr
 import pandas as pd
 from rdkit import Chem
@@ -7,20 +9,109 @@ from rdkit.Chem import AllChem, Draw
 
 from tabs.pipeline.helpers import get_openai_client, logger
 
+COMPOUND_3D_PLACEHOLDER = (
+    '<div style="height:400px;display:flex;align-items:center;'
+    'justify-content:center;background:#f5f5f5;border-radius:8px;">'
+    '<p style="color:#999;">Select a compound to view its 3D structure</p></div>'
+)
+
+
+def build_3d_compound_viewer_html(smiles: str, compound_name: str = "") -> str:
+    """Build an iframe with 3Dmol.js to display a compound's 3D structure from SMILES.
+
+    Converts SMILES → SDF via RDKit (with 3D coordinates + MMFF force-field
+    minimisation), then passes the SDF string directly into the 3Dmol viewer so
+    no external fetch is needed.
+    """
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return (
+            '<div style="height:400px;display:flex;align-items:center;'
+            'justify-content:center;background:#f5f5f5;border-radius:8px;">'
+            '<p style="color:#c00;">Could not parse SMILES for 3D generation</p></div>'
+        )
+
+    # Add hydrogens and generate 3D coordinates
+    mol = Chem.AddHs(mol)
+    result = AllChem.EmbedMolecule(mol, AllChem.ETKDGv3())
+    if result != 0:
+        # Fallback: use distance-geometry with random coords
+        AllChem.EmbedMolecule(mol, randomSeed=42)
+
+    # Energy minimise with MMFF if available, else UFF
+    try:
+        ff_result = AllChem.MMFFOptimizeMolecule(mol, maxIters=500)
+        if ff_result != 0:
+            AllChem.UFFOptimizeMolecule(mol, maxIters=500)
+    except Exception:
+        pass
+
+    sdf_block = Chem.MolToMolBlock(mol)
+
+    # Escape the SDF for safe embedding inside a JS string literal
+    # We use JSON encoding so newlines/quotes are handled correctly
+    import json
+    sdf_json = json.dumps(sdf_block)
+
+    title_html = (
+        f'<div style="padding:6px 10px;font-size:12px;color:#555;'
+        f'border-bottom:1px solid #ddd;background:#fafafa;">'
+        f'<b>3D Structure</b>'
+        + (f': {html_module.escape(compound_name)}' if compound_name else '')
+        + '</div>'
+    )
+
+    inner = (
+        "<!DOCTYPE html>"
+        "<html><head>"
+        "<script src='https://3Dmol.org/build/3Dmol-min.js'></script>"
+        "<style>"
+        "body{margin:0;padding:0;overflow:hidden;background:#fff}"
+        "#viewer{width:100%;height:100%;position:absolute;top:0;left:0}"
+        "</style>"
+        "</head><body>"
+        "<div id='viewer'></div>"
+        "<script>"
+        "window.addEventListener('load', function() {"
+        "  var sdf = " + sdf_json + ";"
+        "  var config = {backgroundColor: 'white'};"
+        "  var viewer = $3Dmol.createViewer('viewer', config);"
+        "  viewer.addModel(sdf, 'sdf');"
+        "  viewer.setStyle({}, {"
+        "    stick: {radius: 0.15, colorscheme: 'Jmol'},"
+        "    sphere: {scale: 0.25, colorscheme: 'Jmol'}"
+        "  });"
+        "  viewer.zoomTo();"
+        "  viewer.render();"
+        "});"
+        "</script>"
+        "</body></html>"
+    )
+
+    escaped = html_module.escape(inner, quote=True)
+    return (
+        f'<div style="border:1px solid #ddd;border-radius:8px;overflow:hidden;">'
+        + title_html
+        + f'<iframe srcdoc="{escaped}" '
+        'style="width:100%;height:390px;border:none;display:block;"></iframe>'
+        '</div>'
+    )
+
 
 def on_select_compound(evt: gr.SelectData, final_state):
     """Handle click on a row in the final results table."""
     if not final_state:
         logger.warning("Compound selection attempted with no compounds available")
-        return "No compound selected.", None, None
+        return "No compound selected.", None, COMPOUND_3D_PLACEHOLDER, None
     idx = evt.index[0] if isinstance(evt.index, (list, tuple)) else evt.index
     if idx >= len(final_state):
         logger.warning(f"Invalid compound index selected: {idx}")
-        return "Invalid selection.", None, None
+        return "Invalid selection.", None, COMPOUND_3D_PLACEHOLDER, None
 
     compound = final_state[idx]
     smiles = compound["smiles"]
-    logger.info(f"Selected compound: {compound.get('name')} (ChEMBL: {compound.get('chembl_id')})")
+    name = compound.get("name", "")
+    logger.info(f"Selected compound: {name} (ChEMBL: {compound.get('chembl_id')})")
 
     detail = (
         f"{'=' * 50}\n"
@@ -53,7 +144,19 @@ def on_select_compound(evt: gr.SelectData, final_state):
         AllChem.Compute2DCoords(mol)
         img = Draw.MolToImage(mol, size=(400, 400))
 
-    return detail, img, compound
+    # Build 3D viewer HTML
+    logger.info(f"Building 3D viewer for {name}")
+    try:
+        viewer_3d = build_3d_compound_viewer_html(smiles, name)
+    except Exception as exc:
+        logger.error(f"3D viewer generation failed for {name}: {exc}")
+        viewer_3d = (
+            '<div style="height:400px;display:flex;align-items:center;'
+            'justify-content:center;background:#f5f5f5;border-radius:8px;">'
+            f'<p style="color:#c00;">3D viewer error: {exc}</p></div>'
+        )
+
+    return detail, img, viewer_3d, compound
 
 
 def ai_explain_compound(selected_state, protein_state):
