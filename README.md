@@ -53,3 +53,22 @@ uv run python app.py
 ```
 
 Opens at http://localhost:7860.
+
+
+## Testing
+
+Run the test suite from the project root:
+
+```bash
+uv run python -m pytest -q
+```
+For more detailed output:
+
+```bash
+uv run python -m pytest -v
+```
+
+Current test coverage includes simple PyTest unit tests for important functions in tabs/pipeline, including:
+
+- `tests/test_helpers.py`
+- `tests/test_filters.py`
