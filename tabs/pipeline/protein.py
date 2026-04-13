@@ -64,13 +64,35 @@ def fetch_protein_info(pdb_id: str) -> dict:
     # Organism
     organisms = []
     try:
-        pr = requests.get(f"{base}/entry/{pdb_id}/polymer_entities", timeout=15)
-        if pr.ok:
-            for ent in pr.json():
-                for s in ent.get("rcsb_entity_source_organism", []):
-                    org = s.get("ncbi_scientific_name")
-                    if org and org not in organisms:
-                        organisms.append(org)
+        polymer_entity_ids = entry.get(
+            "rcsb_entry_container_identifiers", {}
+        ).get("polymer_entity_ids", [])
+
+        for entity_id in polymer_entity_ids:
+            er = requests.get(
+                f"{base}/polymer_entity/{pdb_id}/{entity_id}",
+                timeout=15,
+            )
+            if not er.ok:
+                continue
+
+            entity = er.json()
+
+            for s in entity.get("rcsb_entity_source_organism", []):
+                org = s.get("ncbi_scientific_name") or s.get("scientific_name")
+                if org and org not in organisms:
+                    organisms.append(org)
+
+            for s in entity.get("entity_src_gen", []):
+                org = s.get("pdbx_gene_src_scientific_name")
+                if org and org not in organisms:
+                    organisms.append(org)
+
+            for s in entity.get("entity_src_nat", []):
+                org = s.get("pdbx_organism_scientific")
+                if org and org not in organisms:
+                    organisms.append(org)
+
         logger.debug(f"Found {len(organisms)} organism(s) for {pdb_id}")
     except Exception as e:
         logger.warning(f"Failed to fetch organisms for {pdb_id}: {e}")
