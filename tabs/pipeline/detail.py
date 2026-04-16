@@ -1,13 +1,82 @@
 """Step 6 — Compound detail view, selection handler, AI explanation."""
 
 import html as html_module
+import io
+import json
 
 import gradio as gr
 import pandas as pd
+from PIL import Image
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
+from rdkit.Chem.Draw import rdMolDraw2D
 
 from tabs.pipeline.helpers import get_openai_client, logger
+
+
+# ---------------------------------------------------------------------------
+# Pharmacophore colour palette (RGB 0–1 tuples for rdMolDraw2D)
+# ---------------------------------------------------------------------------
+_DONOR_COLOR    = (0.25, 0.50, 1.00)   # blue  – H-bond donors  (N/O with H)
+_ACCEPTOR_COLOR = (1.00, 0.30, 0.30)   # red   – H-bond acceptors (N/O lone-pair only)
+_AROMATIC_COLOR = (0.90, 0.70, 0.10)   # gold  – aromatic atoms
+
+# SMARTS patterns (matched on heavy-atom mol, no explicit Hs needed)
+_SMARTS_DONOR    = Chem.MolFromSmarts('[N,O;!H0]')
+_SMARTS_ACCEPTOR = Chem.MolFromSmarts('[N,O;H0]')
+_SMARTS_AROMATIC = Chem.MolFromSmarts('[a]')
+
+
+def _pharmacophore_highlights(mol):
+    """Return (highlight_atoms, highlight_atom_colors) for rdMolDraw2D.
+
+    Priority: donor > acceptor > aromatic.
+    Highlights the binding-relevant atoms — those that interact directly
+    with receptor residues via H-bonds or π-stacking.
+    """
+    seen = {}
+
+    def _add(smarts, color):
+        if smarts is None:
+            return
+        for match in mol.GetSubstructMatches(smarts):
+            idx = match[0]
+            if idx not in seen:
+                seen[idx] = color
+
+    _add(_SMARTS_DONOR,    _DONOR_COLOR)
+    _add(_SMARTS_ACCEPTOR, _ACCEPTOR_COLOR)
+    _add(_SMARTS_AROMATIC, _AROMATIC_COLOR)
+
+    atoms  = list(seen.keys())
+    colors = {idx: c for idx, c in seen.items()}
+    return atoms, colors
+
+
+def draw_2d_with_pharmacophore(mol, size=(400, 400)):
+    """Render a 2D molecule image with pharmacophore-feature atom highlights.
+
+    Returns a PIL Image. Falls back to plain MolToImage on any drawing error.
+    """
+    AllChem.Compute2DCoords(mol)
+    highlight_atoms, highlight_colors = _pharmacophore_highlights(mol)
+
+    try:
+        drawer = rdMolDraw2D.MolDraw2DCairo(size[0], size[1])
+        opts = drawer.drawOptions()
+        opts.addAtomIndices = False
+        opts.addStereoAnnotation = True
+        rdMolDraw2D.PrepareAndDrawMolecule(
+            drawer,
+            mol,
+            highlightAtoms=highlight_atoms,
+            highlightAtomColors=highlight_colors,
+        )
+        drawer.FinishDrawing()
+        return Image.open(io.BytesIO(drawer.GetDrawingText()))
+    except Exception as exc:
+        logger.warning(f"Pharmacophore 2D draw failed ({exc}), falling back to plain image")
+        return Draw.MolToImage(mol, size=size)
 
 COMPOUND_3D_PLACEHOLDER = (
     '<div style="height:400px;display:flex;align-items:center;'
@@ -19,26 +88,33 @@ COMPOUND_3D_PLACEHOLDER = (
 def build_3d_compound_viewer_html(smiles: str, compound_name: str = "") -> str:
     """Build an iframe with 3Dmol.js to display a compound's 3D structure from SMILES.
 
-    Converts SMILES → SDF via RDKit (with 3D coordinates + MMFF force-field
-    minimisation), then passes the SDF string directly into the 3Dmol viewer so
-    no external fetch is needed.
+    Converts SMILES → SDF via RDKit (3D coords + MMFF minimisation).  Atoms are
+    coloured by pharmacophore role so binding-relevant features stand out:
+      blue = H-bond donor   red = H-bond acceptor   gold = aromatic   grey = other (Jmol)
     """
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
+    mol_orig = Chem.MolFromSmiles(smiles)
+    if mol_orig is None:
         return (
             '<div style="height:400px;display:flex;align-items:center;'
             'justify-content:center;background:#f5f5f5;border-radius:8px;">'
             '<p style="color:#c00;">Could not parse SMILES for 3D generation</p></div>'
         )
 
+    # Compute pharmacophore indices on the heavy-atom mol (indices stay valid
+    # after AddHs because RDKit appends H atoms at the end)
+    _, pharma_colors = _pharmacophore_highlights(mol_orig)
+
+    # Group indices by colour for JS
+    donors    = [i for i, c in pharma_colors.items() if c == _DONOR_COLOR]
+    acceptors = [i for i, c in pharma_colors.items() if c == _ACCEPTOR_COLOR]
+    aromatics = [i for i, c in pharma_colors.items() if c == _AROMATIC_COLOR]
+
     # Add hydrogens and generate 3D coordinates
-    mol = Chem.AddHs(mol)
+    mol = Chem.AddHs(mol_orig)
     result = AllChem.EmbedMolecule(mol, AllChem.ETKDGv3())
     if result != 0:
-        # Fallback: use distance-geometry with random coords
         AllChem.EmbedMolecule(mol, randomSeed=42)
 
-    # Energy minimise with MMFF if available, else UFF
     try:
         ff_result = AllChem.MMFFOptimizeMolecule(mol, maxIters=500)
         if ff_result != 0:
@@ -47,18 +123,25 @@ def build_3d_compound_viewer_html(smiles: str, compound_name: str = "") -> str:
         pass
 
     sdf_block = Chem.MolToMolBlock(mol)
-
-    # Escape the SDF for safe embedding inside a JS string literal
-    # We use JSON encoding so newlines/quotes are handled correctly
-    import json
     sdf_json = json.dumps(sdf_block)
+
+    # Pharmacophore index lists as JSON for JS
+    donors_js    = json.dumps(donors)
+    acceptors_js = json.dumps(acceptors)
+    aromatics_js = json.dumps(aromatics)
 
     title_html = (
         f'<div style="padding:6px 10px;font-size:12px;color:#555;'
-        f'border-bottom:1px solid #ddd;background:#fafafa;">'
+        f'border-bottom:1px solid #ddd;background:#fafafa;display:flex;'
+        f'align-items:center;gap:12px;">'
         f'<b>3D Structure</b>'
         + (f': {html_module.escape(compound_name)}' if compound_name else '')
-        + '</div>'
+        + '<span style="margin-left:auto;font-size:11px;color:#777;">'
+        '<span style="color:#4488ff">&#9679;</span> H-bond donor &nbsp;'
+        '<span style="color:#ff4444">&#9679;</span> H-bond acceptor &nbsp;'
+        '<span style="color:#cc9900">&#9679;</span> Aromatic'
+        '</span>'
+        '</div>'
     )
 
     inner = (
@@ -74,13 +157,15 @@ def build_3d_compound_viewer_html(smiles: str, compound_name: str = "") -> str:
         "<script>"
         "window.addEventListener('load', function() {"
         "  var sdf = " + sdf_json + ";"
-        "  var config = {backgroundColor: 'white'};"
-        "  var viewer = $3Dmol.createViewer('viewer', config);"
+        "  var donors    = " + donors_js + ";"
+        "  var acceptors = " + acceptors_js + ";"
+        "  var aromatics = " + aromatics_js + ";"
+        "  var viewer = $3Dmol.createViewer('viewer', {backgroundColor: 'white'});"
         "  viewer.addModel(sdf, 'sdf');"
-        "  viewer.setStyle({}, {"
-        "    stick: {radius: 0.15, colorscheme: 'Jmol'},"
-        "    sphere: {scale: 0.25, colorscheme: 'Jmol'}"
-        "  });"
+        "  viewer.setStyle({}, {stick: {radius: 0.13, colorscheme: 'Jmol'}, sphere: {scale: 0.22, colorscheme: 'Jmol'}});"
+        "  if (donors.length)    viewer.setStyle({index: donors},     {stick: {radius: 0.18, color: '#4488ff'}, sphere: {scale: 0.38, color: '#4488ff'}});"
+        "  if (acceptors.length) viewer.setStyle({index: acceptors},  {stick: {radius: 0.18, color: '#ff4444'}, sphere: {scale: 0.38, color: '#ff4444'}});"
+        "  if (aromatics.length) viewer.setStyle({index: aromatics},  {stick: {radius: 0.14, color: '#cc9900'}, sphere: {scale: 0.30, color: '#cc9900'}});"
         "  viewer.zoomTo();"
         "  viewer.render();"
         "});"
@@ -141,8 +226,7 @@ def on_select_compound(evt: gr.SelectData, final_state):
     mol = Chem.MolFromSmiles(smiles)
     img = None
     if mol:
-        AllChem.Compute2DCoords(mol)
-        img = Draw.MolToImage(mol, size=(400, 400))
+        img = draw_2d_with_pharmacophore(mol, size=(400, 400))
 
     # Build 3D viewer HTML
     logger.info(f"Building 3D viewer for {name}")

@@ -3,6 +3,8 @@ import gradio as gr
 from rdkit import Chem
 from rdkit.Chem import Descriptors, Draw
 
+from tabs.pipeline.detail import draw_2d_with_pharmacophore
+
 
 # Canonical goal labels shown to the user (checkboxes)
 OPTIMIZATION_GOAL_OPTIONS = [
@@ -175,8 +177,8 @@ Drug-Likeness Considerations:
 {drug_likeness_text}
 """
 
-    # --- 2D image ---
-    img = Draw.MolToImage(mol, size=(350, 350))
+    # --- 2D image with pharmacophore highlights ---
+    img = draw_2d_with_pharmacophore(mol, size=(350, 350))
 
     return response.strip(), img
 
