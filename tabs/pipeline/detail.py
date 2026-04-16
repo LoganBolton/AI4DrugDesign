@@ -226,12 +226,16 @@ def ai_explain_compound(selected_state, protein_state):
 
 
 def build_protein_ligand_viewer_html(
-    smiles: str, pdb_id: str, compound_name: str = "", binding_center=None
+    smiles: str, pdb_id: str, compound_name: str = "", binding_center=None,
+    pdb_text: str = "",
 ) -> str:
     """Build a 3Dmol.js iframe showing the protein + compound at the binding site.
 
     The compound's 3D centroid is translated to the detected binding-site centre so
     it is placed inside the pocket for visual inspection (not a true docked pose).
+
+    If *pdb_text* is supplied it is embedded directly in the HTML so the browser
+    does not need to fetch the PDB from RCSB again (avoids a redundant download).
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
@@ -287,6 +291,32 @@ def build_protein_ligand_viewer_html(
         f'</div>'
     )
 
+    # Build the JS that loads the protein model.
+    # If the PDB text is already available, embed it directly to avoid a
+    # second network round-trip inside the browser iframe.
+    if pdb_text:
+        pdb_json = json.dumps(pdb_text)
+        load_protein_js = (
+            "  (function() {"
+            "    var pdbData = " + pdb_json + ";"
+            "    document.getElementById('loading').style.display = 'none';"
+            "    renderScene(pdbData);"
+            "  })();"
+        )
+    else:
+        load_protein_js = (
+            f"  jQuery.ajax({{url: 'https://files.rcsb.org/download/{pdb_id_safe}.pdb',"
+            "    success: function(d) {"
+            "      document.getElementById('loading').style.display = 'none';"
+            "      renderScene(d);"
+            "    },"
+            "    error: function() {"
+            "      document.getElementById('loading').textContent ="
+            "        'Failed to load protein structure.';"
+            "    }"
+            "  });"
+        )
+
     inner = (
         "<!DOCTYPE html><html><head>"
         "<script src='https://3Dmol.org/build/3Dmol-min.js'></script>"
@@ -301,39 +331,29 @@ def build_protein_ligand_viewer_html(
         "<div id='viewer'></div>"
         "<div id='loading'>Loading protein structure&hellip;</div>"
         "<script>"
-        "window.addEventListener('load', function() {"
-        "  var sdf = " + sdf_json + ";"
-        f"  var cx = {cx}, cy = {cy}, cz = {cz};"
-        "  var viewer = $3Dmol.createViewer('viewer', {backgroundColor: 'white'});"
-        # Load protein via jQuery AJAX (same pattern as protein.py)
-        f"  jQuery.ajax({{url: 'https://files.rcsb.org/download/{pdb_id_safe}.pdb',"
-        "    success: function(d) {"
-        "      document.getElementById('loading').style.display = 'none';"
-        "      viewer.addModel(d, 'pdb');"
-        # Semi-transparent cartoon for the protein
-        "      var numProteinModels = viewer.getNumModels();"
-        "      viewer.setStyle({}, {cartoon: {color: 'spectrum', opacity: 0.72}});"
-        # Add compound as next model
-        "      viewer.addModel(sdf, 'sdf');"
-        "      viewer.setStyle({model: numProteinModels}, {"
-        "        stick: {radius: 0.18, colorscheme: 'Jmol'},"
-        "        sphere: {scale: 0.28, colorscheme: 'Jmol'}"
-        "      });"
-        # Translucent sphere to mark binding pocket
-        "      if (cx !== 0 || cy !== 0 || cz !== 0) {"
-        "        viewer.addSphere({center: {x: cx, y: cy, z: cz},"
-        "          radius: 9, color: 'yellow', opacity: 0.09, wireframe: false});"
-        "        viewer.addSphere({center: {x: cx, y: cy, z: cz},"
-        "          radius: 9.2, color: 'orange', opacity: 0.18, wireframe: true});"
-        "      }"
-        "      viewer.zoomTo({model: numProteinModels});"
-        "      viewer.render();"
-        "    },"
-        "    error: function() {"
-        "      document.getElementById('loading').textContent ="
-        "        'Failed to load protein structure.';"
-        "    }"
+        "var sdf = " + sdf_json + ";"
+        f"var cx = {cx}, cy = {cy}, cz = {cz};"
+        "var viewer = $3Dmol.createViewer('viewer', {backgroundColor: 'white'});"
+        "function renderScene(pdbData) {"
+        "  viewer.addModel(pdbData, 'pdb');"
+        "  var numProteinModels = viewer.getNumModels();"
+        "  viewer.setStyle({}, {cartoon: {color: 'spectrum', opacity: 0.72}});"
+        "  viewer.addModel(sdf, 'sdf');"
+        "  viewer.setStyle({model: numProteinModels}, {"
+        "    stick: {radius: 0.18, colorscheme: 'Jmol'},"
+        "    sphere: {scale: 0.28, colorscheme: 'Jmol'}"
         "  });"
+        "  if (cx !== 0 || cy !== 0 || cz !== 0) {"
+        "    viewer.addSphere({center: {x: cx, y: cy, z: cz},"
+        "      radius: 9, color: 'yellow', opacity: 0.09, wireframe: false});"
+        "    viewer.addSphere({center: {x: cx, y: cy, z: cz},"
+        "      radius: 9.2, color: 'orange', opacity: 0.18, wireframe: true});"
+        "  }"
+        "  viewer.zoomTo({model: numProteinModels});"
+        "  viewer.render();"
+        "}"
+        "window.addEventListener('load', function() {"
+        + load_protein_js +
         "});"
         "</script>"
         "</body></html>"
@@ -361,8 +381,11 @@ def show_docked_view(selected_state, protein_state):
     if not smiles or not pdb_id:
         return DOCKED_3D_PLACEHOLDER
 
-    # Detect binding centre from the crystal structure
+    # Detect binding centre from the crystal structure.
+    # Keep the fetched PDB text so we can embed it directly in the HTML
+    # instead of downloading it a second time inside the browser iframe.
     binding_center = None
+    pdb_text = ""
     try:
         from tabs.pipeline.docking import fetch_pdb_file, find_binding_center
         pdb_text = fetch_pdb_file(pdb_id)
@@ -372,7 +395,7 @@ def show_docked_view(selected_state, protein_state):
         logger.warning(f"Could not determine binding centre: {exc}")
 
     try:
-        return build_protein_ligand_viewer_html(smiles, pdb_id, name, binding_center)
+        return build_protein_ligand_viewer_html(smiles, pdb_id, name, binding_center, pdb_text)
     except Exception as exc:
         logger.error(f"Docked view generation failed: {exc}")
         return (
