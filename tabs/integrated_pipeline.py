@@ -18,9 +18,11 @@ from tabs.compound_optimization import OPTIMIZATION_GOAL_OPTIONS, _optimize_comp
 from tabs.pipeline.compounds import fetch_compounds
 from tabs.pipeline.detail import (
     COMPOUND_3D_PLACEHOLDER,
+    DOCKED_3D_PLACEHOLDER,
     ai_explain_compound,
     on_select_compound,
     populate_compound_selector,
+    show_docked_view,
 )
 from tabs.pipeline.docking import rank_by_activity
 from tabs.pipeline.filters import apply_adme_filter, apply_rule_of_5
@@ -61,10 +63,11 @@ def _pipeline_initial_status():
         "**Step 3 – Rule of 5:** ⏳ Waiting...",
         "**Step 4 – Docking:** ⏳ Waiting...",
         "**Step 5 – ADME:** ⏳ Waiting...",
-        "",     # clear detail text
-        None,   # clear detail image
-        COMPOUND_3D_PLACEHOLDER,  # reset 3D viewer
-        "",     # clear AI explanation
+        "",                       # clear detail text
+        None,                     # clear detail image
+        COMPOUND_3D_PLACEHOLDER,  # reset 3D compound viewer
+        DOCKED_3D_PLACEHOLDER,    # reset docked view
+        "",                       # clear AI explanation
     )
 
 
@@ -239,6 +242,21 @@ def create_tab():
             value=COMPOUND_3D_PLACEHOLDER,
             label="3D Structure",
         )
+
+        # Protein + Compound docked view
+        gr.Markdown("### Compound in Binding Site")
+        gr.Markdown(
+            "Click the button below to render the selected compound positioned "
+            "inside the protein's binding pocket. The compound is placed at the "
+            "co-crystallised ligand centre detected from the PDB structure."
+        )
+        show_docked_btn = gr.Button(
+            "Show Compound in Binding Site",
+            variant="primary",
+            size="lg",
+        )
+        docked_viewer_html = gr.HTML(value=DOCKED_3D_PLACEHOLDER)
+
         explain_compound_btn = gr.Button(
             "AI: Explain This Compound", variant="secondary", size="lg"
         )
@@ -259,7 +277,8 @@ def create_tab():
             _pipeline_initial_status,
             outputs=[protein_status, compounds_status,
                      ro5_status, rank_status, adme_status,
-                     detail_text, detail_image, compound_3d_viewer, compound_explanation],
+                     detail_text, detail_image, compound_3d_viewer,
+                     docked_viewer_html, compound_explanation],
             **_progress_args,
         ).then(
             _run_protein_and_compounds_parallel,
@@ -319,6 +338,13 @@ def create_tab():
             lambda c: c.get("smiles", "") if c else "",
             inputs=[selected_state],
             outputs=[optim_smiles_input],
+        )
+
+        # Show compound docked in binding site
+        show_docked_btn.click(
+            show_docked_view,
+            inputs=[selected_state, protein_state],
+            outputs=[docked_viewer_html],
         )
 
         # Compound optimization

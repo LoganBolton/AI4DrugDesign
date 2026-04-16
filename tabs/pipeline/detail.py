@@ -1,8 +1,10 @@
 """Step 6 — Compound detail view, selection handler, AI explanation."""
 
 import html as html_module
+import json
 
 import gradio as gr
+import numpy as np
 import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
@@ -13,6 +15,16 @@ COMPOUND_3D_PLACEHOLDER = (
     '<div style="height:400px;display:flex;align-items:center;'
     'justify-content:center;background:#f5f5f5;border-radius:8px;">'
     '<p style="color:#999;">Select a compound to view its 3D structure</p></div>'
+)
+
+DOCKED_3D_PLACEHOLDER = (
+    '<div style="height:520px;display:flex;align-items:center;'
+    'justify-content:center;background:#f0f4ff;border-radius:8px;border:1px solid #c8d8f0;">'
+    '<p style="color:#666;text-align:center;padding:20px;">'
+    'Select a compound, then click<br><b>Show Compound in Binding Site</b>'
+    '<br><br><span style="font-size:11px;color:#999;">'
+    'Renders the protein with the compound positioned at the binding pocket</span>'
+    '</p></div>'
 )
 
 
@@ -211,6 +223,163 @@ def ai_explain_compound(selected_state, protein_state):
     except Exception as exc:
         logger.error(f"AI compound explanation failed: {exc}")
         return f"AI analysis failed: {exc}"
+
+
+def build_protein_ligand_viewer_html(
+    smiles: str, pdb_id: str, compound_name: str = "", binding_center=None
+) -> str:
+    """Build a 3Dmol.js iframe showing the protein + compound at the binding site.
+
+    The compound's 3D centroid is translated to the detected binding-site centre so
+    it is placed inside the pocket for visual inspection (not a true docked pose).
+    """
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return (
+            '<div style="height:520px;display:flex;align-items:center;'
+            'justify-content:center;background:#f5f5f5;border-radius:8px;">'
+            '<p style="color:#c00;">Could not parse SMILES for 3D generation</p></div>'
+        )
+
+    mol = Chem.AddHs(mol)
+    result = AllChem.EmbedMolecule(mol, AllChem.ETKDGv3())
+    if result != 0:
+        AllChem.EmbedMolecule(mol, randomSeed=42)
+    try:
+        ff = AllChem.MMFFOptimizeMolecule(mol, maxIters=500)
+        if ff != 0:
+            AllChem.UFFOptimizeMolecule(mol, maxIters=500)
+    except Exception:
+        pass
+
+    # Translate compound centroid to binding site centre
+    cx, cy, cz = (binding_center if binding_center else (0.0, 0.0, 0.0))
+    try:
+        conf = mol.GetConformer()
+        positions = conf.GetPositions()          # numpy array (N, 3)
+        centroid = positions.mean(axis=0)
+        dx, dy, dz = cx - centroid[0], cy - centroid[1], cz - centroid[2]
+        for i in range(mol.GetNumAtoms()):
+            pos = conf.GetAtomPosition(i)
+            conf.SetAtomPosition(i, (pos.x + dx, pos.y + dy, pos.z + dz))
+    except Exception as exc:
+        logger.warning(f"Could not translate compound to binding site: {exc}")
+
+    sdf_block = Chem.MolToMolBlock(mol)
+    sdf_json = json.dumps(sdf_block)
+
+    pdb_id_safe = pdb_id.strip().upper()
+    title_label = (
+        f"Compound in Binding Site: {html_module.escape(compound_name)}"
+        if compound_name
+        else "Compound in Binding Site"
+    )
+
+    title_html = (
+        f'<div style="padding:6px 12px;font-size:12px;color:#444;'
+        f'border-bottom:1px solid #ddd;background:#f0f4ff;'
+        f'display:flex;justify-content:space-between;align-items:center;">'
+        f'<b>{title_label}</b>'
+        f'<span style="color:#888;font-size:11px;">'
+        f'Protein: semi-transparent cartoon &nbsp;|&nbsp; '
+        f'Compound: stick/sphere &nbsp;|&nbsp; '
+        f'Yellow sphere: binding region</span>'
+        f'</div>'
+    )
+
+    inner = (
+        "<!DOCTYPE html><html><head>"
+        "<script src='https://3Dmol.org/build/3Dmol-min.js'></script>"
+        "<style>"
+        "body{margin:0;padding:0;overflow:hidden;background:#fff;font-family:sans-serif}"
+        "#viewer{width:100%;height:100%;position:absolute;top:0;left:0}"
+        "#loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);"
+        "color:#555;font-size:13px;z-index:10;pointer-events:none;"
+        "background:rgba(255,255,255,0.85);padding:8px 16px;border-radius:6px;}"
+        "</style>"
+        "</head><body>"
+        "<div id='viewer'></div>"
+        "<div id='loading'>Loading protein structure&hellip;</div>"
+        "<script>"
+        "window.addEventListener('load', function() {"
+        "  var sdf = " + sdf_json + ";"
+        f"  var cx = {cx}, cy = {cy}, cz = {cz};"
+        "  var viewer = $3Dmol.createViewer('viewer', {backgroundColor: 'white'});"
+        # Load protein via jQuery AJAX (same pattern as protein.py)
+        f"  jQuery.ajax({{url: 'https://files.rcsb.org/download/{pdb_id_safe}.pdb',"
+        "    success: function(d) {"
+        "      document.getElementById('loading').style.display = 'none';"
+        "      viewer.addModel(d, 'pdb');"
+        # Semi-transparent cartoon for the protein
+        "      var numProteinModels = viewer.getNumModels();"
+        "      viewer.setStyle({}, {cartoon: {color: 'spectrum', opacity: 0.72}});"
+        # Add compound as next model
+        "      viewer.addModel(sdf, 'sdf');"
+        "      viewer.setStyle({model: numProteinModels}, {"
+        "        stick: {radius: 0.18, colorscheme: 'Jmol'},"
+        "        sphere: {scale: 0.28, colorscheme: 'Jmol'}"
+        "      });"
+        # Translucent sphere to mark binding pocket
+        "      if (cx !== 0 || cy !== 0 || cz !== 0) {"
+        "        viewer.addSphere({center: {x: cx, y: cy, z: cz},"
+        "          radius: 9, color: 'yellow', opacity: 0.09, wireframe: false});"
+        "        viewer.addSphere({center: {x: cx, y: cy, z: cz},"
+        "          radius: 9.2, color: 'orange', opacity: 0.18, wireframe: true});"
+        "      }"
+        "      viewer.zoomTo({model: numProteinModels});"
+        "      viewer.render();"
+        "    },"
+        "    error: function() {"
+        "      document.getElementById('loading').textContent ="
+        "        'Failed to load protein structure.';"
+        "    }"
+        "  });"
+        "});"
+        "</script>"
+        "</body></html>"
+    )
+
+    escaped = html_module.escape(inner, quote=True)
+    return (
+        '<div style="border:1px solid #c8d8f0;border-radius:8px;overflow:hidden;">'
+        + title_html
+        + f'<iframe srcdoc="{escaped}" '
+        'style="width:100%;height:510px;border:none;display:block;"></iframe>'
+        '</div>'
+    )
+
+
+def show_docked_view(selected_state, protein_state):
+    """Callback: render the selected compound positioned at the protein binding site."""
+    if not selected_state or not protein_state:
+        return DOCKED_3D_PLACEHOLDER
+
+    smiles = selected_state.get("smiles", "")
+    name = selected_state.get("name", "")
+    pdb_id = protein_state.get("pdb_id", "")
+
+    if not smiles or not pdb_id:
+        return DOCKED_3D_PLACEHOLDER
+
+    # Detect binding centre from the crystal structure
+    binding_center = None
+    try:
+        from tabs.pipeline.docking import fetch_pdb_file, find_binding_center
+        pdb_text = fetch_pdb_file(pdb_id)
+        binding_center = find_binding_center(pdb_text)
+        logger.info(f"Binding centre for {pdb_id}: {binding_center}")
+    except Exception as exc:
+        logger.warning(f"Could not determine binding centre: {exc}")
+
+    try:
+        return build_protein_ligand_viewer_html(smiles, pdb_id, name, binding_center)
+    except Exception as exc:
+        logger.error(f"Docked view generation failed: {exc}")
+        return (
+            '<div style="height:520px;display:flex;align-items:center;'
+            'justify-content:center;background:#f5f5f5;border-radius:8px;">'
+            f'<p style="color:#c00;">Viewer error: {html_module.escape(str(exc))}</p></div>'
+        )
 
 
 def populate_compound_selector(final_state):
