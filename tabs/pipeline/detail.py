@@ -291,25 +291,39 @@ def build_protein_ligand_viewer_html(
         f'</div>'
     )
 
-    # Build the JS that loads the protein model.
-    # If the PDB text is already available, embed it directly to avoid a
-    # second network round-trip inside the browser iframe.
+    # JS that runs once pdbData is in scope (viewer/sdf/cx/cy/cz are closures)
+    render_js = (
+        "  document.getElementById('loading').style.display = 'none';"
+        "  viewer.addModel(pdbData, 'pdb');"
+        "  var n = viewer.getNumModels();"
+        "  viewer.setStyle({}, {cartoon: {color: 'spectrum', opacity: 0.72}});"
+        "  viewer.addModel(sdf, 'sdf');"
+        "  viewer.setStyle({model: n}, {"
+        "    stick: {radius: 0.18, colorscheme: 'Jmol'},"
+        "    sphere: {scale: 0.28, colorscheme: 'Jmol'}"
+        "  });"
+        "  if (cx !== 0 || cy !== 0 || cz !== 0) {"
+        "    viewer.addSphere({center: {x: cx, y: cy, z: cz},"
+        "      radius: 9, color: 'yellow', opacity: 0.09, wireframe: false});"
+        "    viewer.addSphere({center: {x: cx, y: cy, z: cz},"
+        "      radius: 9.2, color: 'orange', opacity: 0.18, wireframe: true});"
+        "  }"
+        "  viewer.zoomTo({model: n});"
+        "  viewer.render();"
+    )
+
     if pdb_text:
         pdb_json = json.dumps(pdb_text)
-        load_protein_js = (
-            "  (function() {"
-            "    var pdbData = " + pdb_json + ";"
-            "    document.getElementById('loading').style.display = 'none';"
-            "    renderScene(pdbData);"
-            "  })();"
+        scene_js = (
+            "  var pdbData = " + pdb_json + ";"
+            + render_js
         )
     else:
-        load_protein_js = (
+        scene_js = (
             f"  fetch('https://files.rcsb.org/download/{pdb_id_safe}.pdb')"
             "    .then(function(r){return r.ok?r.text():Promise.reject(r.status);})"
-            "    .then(function(d){"
-            "      document.getElementById('loading').style.display='none';"
-            "      renderScene(d);"
+            "    .then(function(pdbData){"
+            + render_js +
             "    })"
             "    .catch(function(){"
             "      document.getElementById('loading').textContent='Failed to load protein structure.';"
@@ -330,29 +344,11 @@ def build_protein_ligand_viewer_html(
         "<div id='viewer'></div>"
         "<div id='loading'>Loading protein structure&hellip;</div>"
         "<script>"
-        "var sdf = " + sdf_json + ";"
-        f"var cx = {cx}, cy = {cy}, cz = {cz};"
-        "var viewer = $3Dmol.createViewer('viewer', {backgroundColor: 'white'});"
-        "function renderScene(pdbData) {"
-        "  viewer.addModel(pdbData, 'pdb');"
-        "  var numProteinModels = viewer.getNumModels();"
-        "  viewer.setStyle({}, {cartoon: {color: 'spectrum', opacity: 0.72}});"
-        "  viewer.addModel(sdf, 'sdf');"
-        "  viewer.setStyle({model: numProteinModels}, {"
-        "    stick: {radius: 0.18, colorscheme: 'Jmol'},"
-        "    sphere: {scale: 0.28, colorscheme: 'Jmol'}"
-        "  });"
-        "  if (cx !== 0 || cy !== 0 || cz !== 0) {"
-        "    viewer.addSphere({center: {x: cx, y: cy, z: cz},"
-        "      radius: 9, color: 'yellow', opacity: 0.09, wireframe: false});"
-        "    viewer.addSphere({center: {x: cx, y: cy, z: cz},"
-        "      radius: 9.2, color: 'orange', opacity: 0.18, wireframe: true});"
-        "  }"
-        "  viewer.zoomTo({model: numProteinModels});"
-        "  viewer.render();"
-        "}"
         "window.addEventListener('load', function() {"
-        + load_protein_js +
+        "  var sdf = " + sdf_json + ";"
+        f"  var cx = {cx}, cy = {cy}, cz = {cz};"
+        "  var viewer = $3Dmol.createViewer('viewer', {backgroundColor: 'white'});"
+        + scene_js +
         "});"
         "</script>"
         "</body></html>"
