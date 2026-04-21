@@ -11,6 +11,306 @@ from rdkit.Chem import AllChem, Draw
 
 from tabs.pipeline.helpers import get_openai_client, logger
 
+_SKIP_RESIDUES_POCKET = frozenset({
+    "HOH", "SO4", "PO4", "GOL", "EDO", "ACT", "FMT", "IOD",
+    "CL", "MG", "ZN", "CA", "NA", "PEG", "DMS", "MPD", "IMD",
+})
+_HYDROPHOBIC_RESIDUES = frozenset({
+    "ALA", "VAL", "LEU", "ILE", "PHE", "TRP", "TYR", "MET", "PRO", "CYS",
+})
+
+def _parse_pdb_atoms(pdb_text: str) -> list:
+    """Return list of atom dicts from ATOM/HETATM records in a PDB text block."""
+    atoms = []
+    for line in pdb_text.splitlines():
+        rec = line[:6]
+        if rec not in ("ATOM  ", "HETATM"):
+            continue
+        try:
+            res_name = line[17:20].strip()
+            chain = line[21] if len(line) > 21 else " "
+            res_seq = int(line[22:26])
+            x, y, z = float(line[30:38]), float(line[38:46]), float(line[46:54])
+            element = line[76:78].strip().upper() if len(line) > 77 else ""
+            if not element:
+                for ch in line[12:16].strip():
+                    if ch.isalpha():
+                        element = ch.upper()
+                        break
+            atoms.append({
+                "record": rec.strip(),
+                "res_name": res_name,
+                "chain": chain,
+                "res_seq": res_seq,
+                "x": x, "y": y, "z": z,
+                "element": element,
+            })
+        except (ValueError, IndexError):
+            continue
+    return atoms
+
+
+def _analyze_binding_pocket(mol, pdb_text: str, binding_center, cutoff: float = 6.0):
+    """Find pocket residues and candidate H-bond / hydrophobic interaction pairs.
+
+    Returns:
+        pocket_residues : list[dict]  — residues with any atom within *cutoff* Å of ligand
+        hbond_pairs     : list[dict]  — closest N/O … N/O contacts ≤ 3.5 Å (one per residue)
+        hydro_pairs     : list[dict]  — closest C … C hydrophobic contacts ≤ 4.5 Å
+    """
+    if not pdb_text or mol is None:
+        return [], [], []
+    try:
+        conf = mol.GetConformer()
+        lig_pos = conf.GetPositions()
+        lig_elem = [mol.GetAtomWithIdx(i).GetSymbol().upper() for i in range(mol.GetNumAtoms())]
+    except Exception:
+        return [], [], []
+
+    protein_atoms = [a for a in _parse_pdb_atoms(pdb_text) if a["record"] == "ATOM"]
+    pocket_set: set = set()
+    hbond_best: dict = {}
+    hydro_best: dict = {}
+
+    for pa in protein_atoms:
+        if pa["res_name"] in _SKIP_RESIDUES_POCKET:
+            continue
+        px, py, pz = pa["x"], pa["y"], pa["z"]
+        pe = pa["element"]
+        for j, (lx, ly, lz) in enumerate(lig_pos):
+            dist = ((px - lx) ** 2 + (py - ly) ** 2 + (pz - lz) ** 2) ** 0.5
+            if dist < cutoff:
+                pocket_set.add((pa["chain"], pa["res_seq"], pa["res_name"]))
+            le = lig_elem[j]
+            key = (pa["chain"], pa["res_seq"])
+            if dist < 3.5 and pe in ("N", "O") and le in ("N", "O"):
+                if key not in hbond_best or dist < hbond_best[key][0]:
+                    hbond_best[key] = (dist, {
+                        "lig": [round(lx, 3), round(ly, 3), round(lz, 3)],
+                        "prot": [round(px, 3), round(py, 3), round(pz, 3)],
+                        "res_name": pa["res_name"], "res_seq": pa["res_seq"],
+                    })
+            if (dist < 4.5 and pe == "C" and le == "C"
+                    and pa["res_name"] in _HYDROPHOBIC_RESIDUES):
+                if key not in hydro_best or dist < hydro_best[key][0]:
+                    hydro_best[key] = (dist, {
+                        "lig": [round(lx, 3), round(ly, 3), round(lz, 3)],
+                        "prot": [round(px, 3), round(py, 3), round(pz, 3)],
+                        "res_name": pa["res_name"], "res_seq": pa["res_seq"],
+                    })
+
+    pocket_list = [{"chain": r[0], "res_seq": r[1], "res_name": r[2]} for r in pocket_set]
+    hbond_list = [v[1] for v in sorted(hbond_best.values(), key=lambda x: x[0])][:10]
+    hydro_list = [v[1] for v in sorted(hydro_best.values(), key=lambda x: x[0])][:15]
+    return pocket_list, hbond_list, hydro_list
+
+
+def build_receptor_interaction_viewer_html(
+    smiles: str,
+    pdb_id: str,
+    compound_name: str = "",
+    binding_center=None,
+    pdb_text: str = "",
+) -> str:
+    """Build an interactive 3Dmol.js viewer showing compound-receptor interactions.
+
+    Renders the protein as a semi-transparent cartoon, highlights binding-pocket
+    residues as sticks, and draws dashed lines for H-bond (blue) and hydrophobic
+    (orange) contacts.  An overlay panel reports interaction counts.
+    """
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return (
+            '<div style="height:570px;display:flex;align-items:center;'
+            'justify-content:center;background:#0d1117;border-radius:8px;">'
+            '<p style="color:#f87171;">Could not parse SMILES for 3D generation</p></div>'
+        )
+
+    mol = Chem.AddHs(mol)
+    result = AllChem.EmbedMolecule(mol, AllChem.ETKDGv3())
+    if result != 0:
+        AllChem.EmbedMolecule(mol, randomSeed=42)
+    try:
+        ff = AllChem.MMFFOptimizeMolecule(mol, maxIters=500)
+        if ff != 0:
+            AllChem.UFFOptimizeMolecule(mol, maxIters=500)
+    except Exception:
+        pass
+
+    cx, cy, cz = (binding_center if binding_center else (0.0, 0.0, 0.0))
+    try:
+        conf = mol.GetConformer()
+        centroid = conf.GetPositions().mean(axis=0)
+        dx, dy, dz = cx - centroid[0], cy - centroid[1], cz - centroid[2]
+        for i in range(mol.GetNumAtoms()):
+            p = conf.GetAtomPosition(i)
+            conf.SetAtomPosition(i, (p.x + dx, p.y + dy, p.z + dz))
+    except Exception as exc:
+        logger.warning(f"Could not translate compound to binding site: {exc}")
+
+    sdf_block = Chem.MolToMolBlock(mol)
+    pocket_residues, hbond_pairs, hydro_pairs = _analyze_binding_pocket(
+        mol, pdb_text, binding_center
+    )
+    pocket_resi = sorted({r["res_seq"] for r in pocket_residues})
+
+    sdf_json = json.dumps(sdf_block)
+    pocket_json = json.dumps(pocket_resi)
+    hbonds_json = json.dumps(hbond_pairs)
+    hydros_json = json.dumps(hydro_pairs)
+
+    pdb_id_safe = pdb_id.strip().upper()
+    title_label = (
+        f"Receptor Interaction View: {html_module.escape(compound_name)}"
+        if compound_name else "Receptor Interaction View"
+    )
+    title_html = (
+        f'<div style="padding:8px 14px;font-size:13px;border-bottom:1px solid #30363d;'
+        f'background:#161b22;display:flex;justify-content:space-between;align-items:center;">'
+        f'<b style="color:#79c0ff;">{title_label}</b>'
+        f'<span style="color:#8b949e;font-size:11px;">'
+        f'Pocket: <span style="color:#56d364;">green sticks</span> &nbsp;|&nbsp; '
+        f'H-bonds: <span style="color:#79c0ff;">&#9473;&#9473;</span> &nbsp;|&nbsp; '
+        f'Hydrophobic: <span style="color:#e3b341;">&#9473;&#9473;</span>'
+        f'</span></div>'
+    )
+
+    render_js = (
+        "  document.getElementById('loading').style.display='none';"
+        "  viewer.addModel(pdbData,'pdb');"
+        "  viewer.setStyle({model:0},{cartoon:{color:'spectrum',opacity:0.38}});"
+        "  if(pocketResi.length>0){"
+        "    viewer.setStyle({model:0,resi:pocketResi},{"
+        "      cartoon:{color:'spectrum',opacity:0.75},"
+        "      stick:{radius:0.12,colorscheme:'greenCarbon',opacity:0.95}"
+        "    });"
+        "  }"
+        "  viewer.addModel(sdf,'sdf');"
+        "  viewer.setStyle({model:1},{"
+        "    stick:{radius:0.20,colorscheme:'Jmol'},"
+        "    sphere:{scale:0.30,colorscheme:'Jmol'}"
+        "  });"
+        "  if(cx!==0||cy!==0||cz!==0){"
+        "    viewer.addSphere({center:{x:cx,y:cy,z:cz},radius:8,color:'#ffd700',opacity:0.04});"
+        "    viewer.addSphere({center:{x:cx,y:cy,z:cz},radius:8.2,color:'#ffd700',opacity:0.12,wireframe:true});"
+        "  }"
+        "  for(var i=0;i<hbonds.length;i++){drawDash(hbonds[i].lig,hbonds[i].prot,'#4d94ff',6);}"
+        "  for(var i=0;i<hydros.length;i++){drawDash(hydros[i].lig,hydros[i].prot,'#ff8c00',5);}"
+        "  for(var i=0;i<Math.min(hbonds.length,6);i++){"
+        "    var hb=hbonds[i];"
+        "    viewer.addLabel(hb.res_name+hb.res_seq,{"
+        "      position:{x:hb.prot[0],y:hb.prot[1],z:hb.prot[2]},"
+        "      fontSize:11,fontColor:'#79c0ff',"
+        "      backgroundOpacity:0.55,backgroundColor:'#0d1117'"
+        "    });"
+        "  }"
+        "  viewer.zoomTo({model:1});"
+        "  viewer.render();"
+        "  document.getElementById('hb-n').textContent=hbonds.length;"
+        "  document.getElementById('hy-n').textContent=hydros.length;"
+        "  document.getElementById('pk-n').textContent=pocketResi.length;"
+    )
+
+    if pdb_text:
+        scene_js = "var pdbData=" + json.dumps(pdb_text) + ";" + render_js
+    else:
+        scene_js = (
+            f"fetch('https://files.rcsb.org/download/{pdb_id_safe}.pdb')"
+            ".then(function(r){return r.ok?r.text():Promise.reject(r.status);})"
+            ".then(function(pdbData){" + render_js + "})"
+            ".catch(function(){"
+            "  document.getElementById('loading').textContent='Failed to load protein.';"
+            "});"
+        )
+
+    inner = (
+        "<!DOCTYPE html><html><head>"
+        "<script src='https://3Dmol.org/build/3Dmol-min.js'></script>"
+        "<style>"
+        "body{margin:0;padding:0;overflow:hidden;background:#0d1117;font-family:monospace}"
+        "#viewer{width:100%;height:100%;position:absolute;top:0;left:0}"
+        "#loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);"
+        "color:#8b949e;font-size:13px;z-index:10;pointer-events:none;"
+        "background:rgba(13,17,23,0.88);padding:10px 18px;border-radius:6px}"
+        "#panel{position:absolute;top:8px;right:8px;z-index:20;"
+        "background:rgba(13,17,23,0.82);border:1px solid #30363d;"
+        "border-radius:8px;padding:10px 14px;color:#c9d1d9;font-size:11px;min-width:155px}"
+        "#panel h4{margin:0 0 7px;color:#79c0ff;font-size:12px}"
+        ".sr{display:flex;justify-content:space-between;gap:12px;margin:3px 0}"
+        ".sl{color:#8b949e}.hb{color:#79c0ff;font-weight:bold}"
+        ".hy{color:#e3b341;font-weight:bold}.pk{color:#56d364;font-weight:bold}"
+        "#leg{margin-top:8px;border-top:1px solid #30363d;padding-top:7px}"
+        ".li{display:flex;align-items:center;gap:6px;margin:3px 0;font-size:10px}"
+        ".dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0}"
+        "#ctrl{position:absolute;bottom:8px;left:8px;z-index:20;"
+        "background:rgba(13,17,23,0.75);border-radius:6px;padding:5px 8px}"
+        ".btn{background:#21262d;border:1px solid #30363d;color:#c9d1d9;"
+        "padding:4px 10px;border-radius:5px;cursor:pointer;margin:2px;font-size:10px;"
+        "font-family:monospace}"
+        ".btn:hover{background:#30363d;color:#fff}"
+        "</style>"
+        "</head><body>"
+        "<div id='viewer'></div>"
+        "<div id='loading'>Loading structure&hellip;</div>"
+        "<div id='panel'>"
+        "<h4>Interactions</h4>"
+        "<div class='sr'><span class='sl'>H-bonds</span><span class='hb' id='hb-n'>—</span></div>"
+        "<div class='sr'><span class='sl'>Hydrophobic</span><span class='hy' id='hy-n'>—</span></div>"
+        "<div class='sr'><span class='sl'>Pocket residues</span><span class='pk' id='pk-n'>—</span></div>"
+        "<div id='leg'>"
+        "<div class='li'><span class='dot' style='background:#4d94ff'></span>H-bond</div>"
+        "<div class='li'><span class='dot' style='background:#ff8c00'></span>Hydrophobic</div>"
+        "<div class='li'><span class='dot' style='background:#56d364'></span>Pocket residue</div>"
+        "<div class='li'><span class='dot' style='background:#ff6b6b'></span>Compound</div>"
+        "</div></div>"
+        "<div id='ctrl'>"
+        "<button class='btn' onclick='toggleSurface()'>Toggle Surface</button>"
+        "<button class='btn' onclick='if(viewer){viewer.zoomTo({model:1});viewer.render();}'>Reset View</button>"
+        "</div>"
+        "<script>"
+        "var sdf=" + sdf_json + ";"
+        "var pocketResi=" + pocket_json + ";"
+        "var hbonds=" + hbonds_json + ";"
+        "var hydros=" + hydros_json + ";"
+        f"var cx={cx},cy={cy},cz={cz};"
+        "var viewer=null,surfId=null;"
+        "function drawDash(s,e,col,n){"
+        "  if(!viewer)return;"
+        "  n=n||7;"
+        "  var dx=(e[0]-s[0])/(n*2),dy=(e[1]-s[1])/(n*2),dz=(e[2]-s[2])/(n*2);"
+        "  for(var i=0;i<n;i++){"
+        "    var sx=s[0]+dx*i*2,sy=s[1]+dy*i*2,sz=s[2]+dz*i*2;"
+        "    viewer.addCylinder({start:{x:sx,y:sy,z:sz},end:{x:sx+dx,y:sy+dy,z:sz+dz},"
+        "      radius:0.07,color:col,fromCap:1,toCap:1});"
+        "  }"
+        "}"
+        "function toggleSurface(){"
+        "  if(!viewer)return;"
+        "  if(surfId!==null){viewer.removeSurface(surfId);surfId=null;}"
+        "  else{"
+        "    var sel=pocketResi.length>0?{model:0,resi:pocketResi}:{model:0};"
+        "    surfId=viewer.addSurface($3Dmol.SurfaceType.VDW,{opacity:0.25,colorscheme:'whiteCarbon'},sel);"
+        "  }"
+        "  viewer.render();"
+        "}"
+        "window.addEventListener('load',function(){"
+        "  viewer=$3Dmol.createViewer('viewer',{backgroundColor:'#0d1117'});"
+        + scene_js +
+        "});"
+        "</script>"
+        "</body></html>"
+    )
+
+    escaped = html_module.escape(inner, quote=True)
+    return (
+        '<div style="border:1px solid #30363d;border-radius:8px;overflow:hidden;background:#161b22;">'
+        + title_html
+        + f'<iframe srcdoc="{escaped}" '
+        'style="width:100%;height:550px;border:none;display:block;"></iframe>'
+        '</div>'
+    )
+
+
 COMPOUND_3D_PLACEHOLDER = (
     '<div style="height:400px;display:flex;align-items:center;'
     'justify-content:center;background:#f5f5f5;border-radius:8px;">'
@@ -390,13 +690,13 @@ def show_docked_view(selected_state, protein_state):
         logger.warning(f"Could not determine binding centre: {exc}")
 
     try:
-        return build_protein_ligand_viewer_html(smiles, pdb_id, name, binding_center, pdb_text)
+        return build_receptor_interaction_viewer_html(smiles, pdb_id, name, binding_center, pdb_text)
     except Exception as exc:
-        logger.error(f"Docked view generation failed: {exc}")
+        logger.error(f"Receptor interaction viewer failed: {exc}")
         return (
-            '<div style="height:520px;display:flex;align-items:center;'
-            'justify-content:center;background:#f5f5f5;border-radius:8px;">'
-            f'<p style="color:#c00;">Viewer error: {html_module.escape(str(exc))}</p></div>'
+            '<div style="height:570px;display:flex;align-items:center;'
+            'justify-content:center;background:#0d1117;border-radius:8px;">'
+            f'<p style="color:#f87171;">Viewer error: {html_module.escape(str(exc))}</p></div>'
         )
 
 

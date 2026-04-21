@@ -243,15 +243,17 @@ def create_tab():
             label="3D Structure",
         )
 
-        # Protein + Compound docked view
-        gr.Markdown("### Compound in Binding Site")
+        # Receptor interaction viewer
+        gr.Markdown("### Receptor Interaction Viewer")
         gr.Markdown(
-            "Click the button below to render the selected compound positioned "
-            "inside the protein's binding pocket. The compound is placed at the "
-            "co-crystallised ligand centre detected from the PDB structure."
+            "Click below to render the compound docked inside the protein binding pocket. "
+            "Binding-pocket residues are highlighted as green sticks. "
+            "H-bond contacts appear as **blue dashed lines** and hydrophobic contacts as "
+            "**orange dashed lines**. Use the **Toggle Surface** button inside the viewer "
+            "to display the pocket surface."
         )
         show_docked_btn = gr.Button(
-            "Show Compound in Binding Site",
+            "Show Receptor Interaction View",
             variant="primary",
             size="lg",
         )
