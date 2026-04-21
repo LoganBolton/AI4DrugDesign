@@ -305,16 +305,15 @@ def build_protein_ligand_viewer_html(
         )
     else:
         load_protein_js = (
-            f"  jQuery.ajax({{url: 'https://files.rcsb.org/download/{pdb_id_safe}.pdb',"
-            "    success: function(d) {"
-            "      document.getElementById('loading').style.display = 'none';"
+            f"  fetch('https://files.rcsb.org/download/{pdb_id_safe}.pdb')"
+            "    .then(function(r){return r.ok?r.text():Promise.reject(r.status);})"
+            "    .then(function(d){"
+            "      document.getElementById('loading').style.display='none';"
             "      renderScene(d);"
-            "    },"
-            "    error: function() {"
-            "      document.getElementById('loading').textContent ="
-            "        'Failed to load protein structure.';"
-            "    }"
-            "  });"
+            "    })"
+            "    .catch(function(){"
+            "      document.getElementById('loading').textContent='Failed to load protein structure.';"
+            "    });"
         )
 
     inner = (
