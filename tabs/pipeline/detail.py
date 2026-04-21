@@ -209,6 +209,10 @@ def build_receptor_interaction_viewer_html(
         "  document.getElementById('hb-n').textContent=hbonds.length;"
         "  document.getElementById('hy-n').textContent=hydros.length;"
         "  document.getElementById('pk-n').textContent=pocketResi.length;"
+        "  document.getElementById('viewer').addEventListener('wheel',function(e){"
+        "    e.preventDefault();e.stopImmediatePropagation();"
+        "    viewer.zoom(e.deltaY<0?1.05:1/1.05);viewer.render();"
+        "  },{passive:false,capture:true});"
     )
 
     if pdb_text:
@@ -395,6 +399,10 @@ def build_3d_compound_viewer_html(smiles: str, compound_name: str = "") -> str:
         "  });"
         "  viewer.zoomTo();"
         "  viewer.render();"
+        "  document.getElementById('viewer').addEventListener('wheel',function(e){"
+        "    e.preventDefault();e.stopImmediatePropagation();"
+        "    viewer.zoom(e.deltaY<0?1.05:1/1.05);viewer.render();"
+        "  },{passive:false,capture:true});"
         "});"
         "</script>"
         "</body></html>"
