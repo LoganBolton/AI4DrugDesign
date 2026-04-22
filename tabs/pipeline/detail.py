@@ -114,47 +114,60 @@ def build_receptor_interaction_viewer_html(
     compound_name: str = "",
     binding_center=None,
     pdb_text: str = "",
+    docked_sdf: str = "",
 ) -> str:
-    """Build a Schrödinger-style pocket viewer: only binding-pocket residues shown as
-    thin green sticks, compound as thicker cyan sticks, H-bond/hydrophobic dashes,
-    residue labels. No cartoon backbone — purely stick-based like Maestro.
+    """Build a Schrödinger-style pocket viewer: full protein cartoon, binding-pocket
+    residues as thin green sticks, compound as thicker cyan sticks, H-bond/hydrophobic
+    dashes, residue labels.
+
+    If docked_sdf is provided (from an actual AutoDock Vina run) it is used directly
+    as the compound geometry instead of re-generating a conformer from SMILES.
     """
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        return (
-            '<div style="height:570px;display:flex;align-items:center;'
-            'justify-content:center;background:#0d1117;border-radius:8px;">'
-            '<p style="color:#f87171;">Could not parse SMILES for 3D generation</p></div>'
-        )
+    if docked_sdf:
+        # Use the real Vina-docked pose — no conformer generation or translation needed
+        mol = Chem.MolFromMolBlock(docked_sdf, removeHs=False, sanitize=True)
+        if mol is None:
+            logger.warning("Could not parse docked SDF; falling back to conformer generation")
+            docked_sdf = ""
 
-    mol = Chem.AddHs(mol)
-    result = AllChem.EmbedMolecule(mol, AllChem.ETKDGv3())
-    if result != 0:
-        AllChem.EmbedMolecule(mol, randomSeed=42)
-    try:
-        ff = AllChem.MMFFOptimizeMolecule(mol, maxIters=500)
-        if ff != 0:
-            AllChem.UFFOptimizeMolecule(mol, maxIters=500)
-    except Exception:
-        pass
+    if not docked_sdf:
+        # Fallback: generate a conformer from SMILES and translate to binding site
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return (
+                '<div style="height:570px;display:flex;align-items:center;'
+                'justify-content:center;background:#0d1117;border-radius:8px;">'
+                '<p style="color:#f87171;">Could not parse SMILES for 3D generation</p></div>'
+            )
 
-    cx, cy, cz = (binding_center if binding_center else (0.0, 0.0, 0.0))
-    try:
-        conf = mol.GetConformer()
-        centroid = conf.GetPositions().mean(axis=0)
-        dx, dy, dz = cx - centroid[0], cy - centroid[1], cz - centroid[2]
-        for i in range(mol.GetNumAtoms()):
-            p = conf.GetAtomPosition(i)
-            conf.SetAtomPosition(i, (p.x + dx, p.y + dy, p.z + dz))
-    except Exception as exc:
-        logger.warning(f"Could not translate compound to binding site: {exc}")
+        mol = Chem.AddHs(mol)
+        result = AllChem.EmbedMolecule(mol, AllChem.ETKDGv3())
+        if result != 0:
+            AllChem.EmbedMolecule(mol, randomSeed=42)
+        try:
+            ff = AllChem.MMFFOptimizeMolecule(mol, maxIters=500)
+            if ff != 0:
+                AllChem.UFFOptimizeMolecule(mol, maxIters=500)
+        except Exception:
+            pass
+
+        cx, cy, cz = (binding_center if binding_center else (0.0, 0.0, 0.0))
+        try:
+            conf = mol.GetConformer()
+            centroid = conf.GetPositions().mean(axis=0)
+            dx, dy, dz = cx - centroid[0], cy - centroid[1], cz - centroid[2]
+            for i in range(mol.GetNumAtoms()):
+                p = conf.GetAtomPosition(i)
+                conf.SetAtomPosition(i, (p.x + dx, p.y + dy, p.z + dz))
+        except Exception as exc:
+            logger.warning(f"Could not translate compound to binding site: {exc}")
 
     pocket_residues, hbond_pairs, hydro_pairs = _analyze_binding_pocket(
         mol, pdb_text, binding_center
     )
     pocket_resi = sorted({r["res_seq"] for r in pocket_residues})
 
-    # Strip explicit H atoms for a clean stick display (H were needed for 3D embedding)
+    # Strip explicit H atoms for a clean stick display
     mol_display = Chem.RemoveAllHs(mol)
     sdf_block = Chem.MolToMolBlock(mol_display)
 
@@ -778,8 +791,14 @@ def show_docked_view(selected_state, protein_state):
     except Exception as exc:
         logger.warning(f"Could not determine binding centre: {exc}")
 
+    docked_sdf = selected_state.get("docked_sdf", "")
+    if docked_sdf:
+        logger.info(f"Using Vina-docked pose for {name}")
+    else:
+        logger.info(f"No docked pose available for {name}, using conformer fallback")
+
     try:
-        return build_receptor_interaction_viewer_html(smiles, pdb_id, name, binding_center, pdb_text)
+        return build_receptor_interaction_viewer_html(smiles, pdb_id, name, binding_center, pdb_text, docked_sdf)
     except Exception as exc:
         logger.error(f"Receptor interaction viewer failed: {exc}")
         return (

@@ -38,7 +38,7 @@ def smiles_to_pdbqt(smiles: str, output_path: str) -> None:
         f.write(pdbqt_string)
 
 
-def dock_single_compound(args: tuple) -> tuple[int, float]:
+def dock_single_compound(args: tuple) -> tuple[int, float, str]:
     """
     Worker function to dock a single compound (for parallel processing).
 
@@ -46,28 +46,38 @@ def dock_single_compound(args: tuple) -> tuple[int, float]:
         args: Tuple of (idx, smiles, receptor_pdbqt_path, center_coords)
 
     Returns:
-        Tuple of (compound_index, vina_affinity_score)
+        Tuple of (compound_index, vina_affinity_score, docked_sdf_block)
+        docked_sdf_block is an empty string if pose extraction fails.
     """
     idx, smiles, receptor_pdbqt, center = args
 
     try:
-        # Create temporary directory for this compound
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Prepare ligand
             ligand_pdbqt = os.path.join(tmpdir, "ligand.pdbqt")
             smiles_to_pdbqt(smiles, ligand_pdbqt)
 
-            # Run Vina (use 1 CPU per worker to avoid over-subscription)
             v = Vina(sf_name="vina", cpu=1, verbosity=0)
             v.set_receptor(receptor_pdbqt)
             v.set_ligand_from_file(ligand_pdbqt)
             v.compute_vina_maps(center=list(center), box_size=[20, 20, 20])
             v.dock(exhaustiveness=4, n_poses=1)
             energies = v.energies(n_poses=1)
-
             affinity = float(energies[0][0])
-            return (idx, affinity)
 
-    except Exception as e:
-        # Return inf to indicate failure
-        return (idx, float('inf'))
+            # Extract the docked 3D pose and convert to SDF for the visualizer
+            docked_sdf = ""
+            try:
+                poses_pdbqt = v.poses(n_poses=1)
+                from meeko import PDBQTMolecule
+                pdbqt_mol = PDBQTMolecule(poses_pdbqt, skip_typing=True)
+                for pose in pdbqt_mol:
+                    rdkit_mol = pose.export_rdkit_mol()
+                    docked_sdf = Chem.MolToMolBlock(rdkit_mol)
+                    break
+            except Exception:
+                pass  # viewer will fall back to conformer generation
+
+            return (idx, affinity, docked_sdf)
+
+    except Exception:
+        return (idx, float('inf'), "")
