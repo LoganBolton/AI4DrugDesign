@@ -115,11 +115,9 @@ def build_receptor_interaction_viewer_html(
     binding_center=None,
     pdb_text: str = "",
 ) -> str:
-    """Build an interactive 3Dmol.js viewer showing compound-receptor interactions.
-
-    Renders the protein as a semi-transparent cartoon, highlights binding-pocket
-    residues as sticks, and draws dashed lines for H-bond (blue) and hydrophobic
-    (orange) contacts.  An overlay panel reports interaction counts.
+    """Build a Schrödinger-style pocket viewer: only binding-pocket residues shown as
+    thin green sticks, compound as thicker cyan sticks, H-bond/hydrophobic dashes,
+    residue labels. No cartoon backbone — purely stick-based like Maestro.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
@@ -151,11 +149,14 @@ def build_receptor_interaction_viewer_html(
     except Exception as exc:
         logger.warning(f"Could not translate compound to binding site: {exc}")
 
-    sdf_block = Chem.MolToMolBlock(mol)
     pocket_residues, hbond_pairs, hydro_pairs = _analyze_binding_pocket(
         mol, pdb_text, binding_center
     )
     pocket_resi = sorted({r["res_seq"] for r in pocket_residues})
+
+    # Strip explicit H atoms for a clean stick display (H were needed for 3D embedding)
+    mol_display = Chem.RemoveAllHs(mol)
+    sdf_block = Chem.MolToMolBlock(mol_display)
 
     sdf_json = json.dumps(sdf_block)
     pocket_json = json.dumps(pocket_resi)
@@ -172,39 +173,40 @@ def build_receptor_interaction_viewer_html(
         f'background:#161b22;display:flex;justify-content:space-between;align-items:center;">'
         f'<b style="color:#79c0ff;">{title_label}</b>'
         f'<span style="color:#8b949e;font-size:11px;">'
-        f'Pocket: <span style="color:#56d364;">green sticks</span> &nbsp;|&nbsp; '
-        f'H-bonds: <span style="color:#79c0ff;">&#9473;&#9473;</span> &nbsp;|&nbsp; '
-        f'Hydrophobic: <span style="color:#e3b341;">&#9473;&#9473;</span>'
+        f'Pocket: <span style="color:#56d364;">green</span>'
+        f' &nbsp;|&nbsp; Compound: <span style="color:#00bcd4;">cyan</span>'
+        f' &nbsp;|&nbsp; H-bond: <span style="color:#4d94ff;">&#9473;&#9473;</span>'
+        f' &nbsp;|&nbsp; Hydrophobic: <span style="color:#e3b341;">&#9473;&#9473;</span>'
         f'</span></div>'
     )
 
+    # Schrödinger-style rendering:
+    #   - Protein: all atoms hidden; only pocket residues shown as thin sticks (greenCarbon)
+    #   - Compound: thicker sticks + small spheres (cyanCarbon) so it stands out clearly
+    #   - Interactions: dashed cylinders for H-bonds (blue) and hydrophobic contacts (orange)
+    #   - Labels on H-bond residues
     render_js = (
         "  document.getElementById('loading').style.display='none';"
         "  viewer.addModel(pdbData,'pdb');"
-        "  viewer.setStyle({model:0},{cartoon:{color:'spectrum',opacity:0.38}});"
+        "  viewer.setStyle({model:0},{});"  # hide entire protein backbone
         "  if(pocketResi.length>0){"
         "    viewer.setStyle({model:0,resi:pocketResi},{"
-        "      cartoon:{color:'spectrum',opacity:0.75},"
-        "      stick:{radius:0.12,colorscheme:'greenCarbon',opacity:0.95}"
+        "      stick:{radius:0.09,colorscheme:'greenCarbon',opacity:1.0}"
         "    });"
         "  }"
         "  viewer.addModel(sdf,'sdf');"
         "  viewer.setStyle({model:1},{"
-        "    stick:{radius:0.20,colorscheme:'Jmol'},"
-        "    sphere:{scale:0.30,colorscheme:'Jmol'}"
+        "    stick:{radius:0.22,colorscheme:'cyanCarbon'},"
+        "    sphere:{scale:0.28,colorscheme:'cyanCarbon'}"
         "  });"
-        "  if(cx!==0||cy!==0||cz!==0){"
-        "    viewer.addSphere({center:{x:cx,y:cy,z:cz},radius:8,color:'#ffd700',opacity:0.04});"
-        "    viewer.addSphere({center:{x:cx,y:cy,z:cz},radius:8.2,color:'#ffd700',opacity:0.12,wireframe:true});"
-        "  }"
-        "  for(var i=0;i<hbonds.length;i++){drawDash(hbonds[i].lig,hbonds[i].prot,'#4d94ff',6);}"
+        "  for(var i=0;i<hbonds.length;i++){drawDash(hbonds[i].lig,hbonds[i].prot,'#4d94ff',7);}"
         "  for(var i=0;i<hydros.length;i++){drawDash(hydros[i].lig,hydros[i].prot,'#ff8c00',5);}"
-        "  for(var i=0;i<Math.min(hbonds.length,6);i++){"
+        "  for(var i=0;i<Math.min(hbonds.length,8);i++){"
         "    var hb=hbonds[i];"
         "    viewer.addLabel(hb.res_name+hb.res_seq,{"
         "      position:{x:hb.prot[0],y:hb.prot[1],z:hb.prot[2]},"
         "      fontSize:11,fontColor:'#79c0ff',"
-        "      backgroundOpacity:0.55,backgroundColor:'#0d1117'"
+        "      backgroundOpacity:0.60,backgroundColor:'#0d1117'"
         "    });"
         "  }"
         "  viewer.zoomTo({model:1});"
@@ -265,10 +267,10 @@ def build_receptor_interaction_viewer_html(
         "<div class='sr'><span class='sl'>Hydrophobic</span><span class='hy' id='hy-n'>—</span></div>"
         "<div class='sr'><span class='sl'>Pocket residues</span><span class='pk' id='pk-n'>—</span></div>"
         "<div id='leg'>"
-        "<div class='li'><span class='dot' style='background:#4d94ff'></span>H-bond</div>"
-        "<div class='li'><span class='dot' style='background:#ff8c00'></span>Hydrophobic</div>"
-        "<div class='li'><span class='dot' style='background:#56d364'></span>Pocket residue</div>"
-        "<div class='li'><span class='dot' style='background:#ff6b6b'></span>Compound</div>"
+        "<div class='li'><span class='dot' style='background:#4d94ff'></span>H-bond contact</div>"
+        "<div class='li'><span class='dot' style='background:#ff8c00'></span>Hydrophobic contact</div>"
+        "<div class='li'><span class='dot' style='background:#56d364'></span>Pocket residue (green C)</div>"
+        "<div class='li'><span class='dot' style='background:#00bcd4'></span>Compound (cyan C)</div>"
         "</div></div>"
         "<div id='ctrl'>"
         "<button class='btn' onclick='toggleSurface()'>Toggle Surface</button>"
@@ -288,7 +290,7 @@ def build_receptor_interaction_viewer_html(
         "  for(var i=0;i<n;i++){"
         "    var sx=s[0]+dx*i*2,sy=s[1]+dy*i*2,sz=s[2]+dz*i*2;"
         "    viewer.addCylinder({start:{x:sx,y:sy,z:sz},end:{x:sx+dx,y:sy+dy,z:sz+dz},"
-        "      radius:0.07,color:col,fromCap:1,toCap:1});"
+        "      radius:0.06,color:col,fromCap:1,toCap:1});"
         "  }"
         "}"
         "function toggleSurface(){"
@@ -296,7 +298,8 @@ def build_receptor_interaction_viewer_html(
         "  if(surfId!==null){viewer.removeSurface(surfId);surfId=null;}"
         "  else{"
         "    var sel=pocketResi.length>0?{model:0,resi:pocketResi}:{model:0};"
-        "    surfId=viewer.addSurface($3Dmol.SurfaceType.VDW,{opacity:0.25,colorscheme:'whiteCarbon'},sel);"
+        "    surfId=viewer.addSurface($3Dmol.SurfaceType.VDW,"
+        "      {opacity:0.18,color:'#1a3a2a'},sel);"
         "  }"
         "  viewer.render();"
         "}"
