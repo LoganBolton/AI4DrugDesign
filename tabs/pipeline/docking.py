@@ -177,8 +177,9 @@ def rank_by_activity(ro5_state, protein_info_state=None, num_dock=50):
                 logger.info("All jobs submitted, waiting for results...")
 
                 for future in as_completed(futures):
-                    idx, affinity = future.result()
+                    idx, affinity, docked_sdf = future.result()
                     to_dock[idx]["vina_affinity"] = round(affinity, 2)
+                    to_dock[idx]["docked_sdf"] = docked_sdf
                     to_dock[idx]["docked"] = True
 
                     if affinity == float('inf'):
