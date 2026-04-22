@@ -180,24 +180,20 @@ def build_receptor_interaction_viewer_html(
         f'</span></div>'
     )
 
-    # Schrödinger-style rendering:
-    #   - Protein: all atoms hidden; only pocket residues shown as thin sticks (greenCarbon)
-    #   - Compound: thicker sticks + small spheres (cyanCarbon) so it stands out clearly
-    #   - Interactions: dashed cylinders for H-bonds (blue) and hydrophobic contacts (orange)
-    #   - Labels on H-bond residues
+    # Rendering: full protein cartoon + pocket residues as green sticks + compound as cyan sticks only
     render_js = (
         "  document.getElementById('loading').style.display='none';"
         "  viewer.addModel(pdbData,'pdb');"
-        "  viewer.setStyle({model:0},{});"  # hide entire protein backbone
+        "  viewer.setStyle({model:0},{cartoon:{color:'spectrum',opacity:0.4}});"
         "  if(pocketResi.length>0){"
         "    viewer.setStyle({model:0,resi:pocketResi},{"
+        "      cartoon:{color:'spectrum',opacity:0.7},"
         "      stick:{radius:0.09,colorscheme:'greenCarbon',opacity:1.0}"
         "    });"
         "  }"
         "  viewer.addModel(sdf,'sdf');"
         "  viewer.setStyle({model:1},{"
-        "    stick:{radius:0.22,colorscheme:'cyanCarbon'},"
-        "    sphere:{scale:0.28,colorscheme:'cyanCarbon'}"
+        "    stick:{radius:0.22,colorscheme:'cyanCarbon'}"
         "  });"
         "  for(var i=0;i<hbonds.length;i++){drawDash(hbonds[i].lig,hbonds[i].prot,'#4d94ff',7);}"
         "  for(var i=0;i<hydros.length;i++){drawDash(hydros[i].lig,hydros[i].prot,'#ff8c00',5);}"
