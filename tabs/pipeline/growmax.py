@@ -2,31 +2,34 @@
 
 import pandas as pd
 from rdkit import Chem
-from rdkit.Chem import AllChem, Descriptors
+from rdkit.Chem import Descriptors
+from rdkit.Chem.rdChemReactions import ReactionFromSmarts
 
 from tabs.pipeline.helpers import logger
 
+# [c;H1:1] matches an aromatic carbon with exactly 1 implicit H — no explicit H needed.
+# [N;H1:1] matches N with 1 implicit H (pyrrole-type NH, piperidine NH, etc.).
 _REACTION_SMARTS = [
-    ("methyl",       "[c,C:1][H]>>[c,C:1]C"),
-    ("methoxy",      "[c,C:1][H]>>[c,C:1]OC"),
-    ("amino",        "[c,C:1][H]>>[c,C:1]N"),
-    ("hydroxyl",     "[c,C:1][H]>>[c,C:1]O"),
-    ("fluoro",       "[c,C:1][H]>>[c,C:1]F"),
-    ("chloro",       "[c,C:1][H]>>[c,C:1]Cl"),
-    ("cyano",        "[c,C:1][H]>>[c,C:1]C#N"),
-    ("amide",        "[c,C:1][H]>>[c,C:1]C(=O)N"),
-    ("carboxyl",     "[c,C:1][H]>>[c,C:1]C(=O)O"),
-    ("CF3",          "[c,C:1][H]>>[c,C:1]C(F)(F)F"),
-    ("phenyl",       "[c,C:1][H]>>[c,C:1]c1ccccc1"),
-    ("pyridyl",      "[c,C:1][H]>>[c,C:1]c1ccncc1"),
-    ("piperidyl",    "[c,C:1][H]>>[c,C:1]C1CCNCC1"),
-    ("morpholinyl",  "[c,C:1][H]>>[c,C:1]C1CCOCC1"),
-    ("sulfonamide",  "[c,C:1][H]>>[c,C:1]S(=O)(=O)N"),
-    ("acetamide",    "[N:1][H]>>[N:1]C(=O)C"),
+    ("methyl",      "[c;H1:1]>>[c:1]C"),
+    ("methoxy",     "[c;H1:1]>>[c:1]OC"),
+    ("amino",       "[c;H1:1]>>[c:1]N"),
+    ("hydroxyl",    "[c;H1:1]>>[c:1]O"),
+    ("fluoro",      "[c;H1:1]>>[c:1]F"),
+    ("chloro",      "[c;H1:1]>>[c:1]Cl"),
+    ("cyano",       "[c;H1:1]>>[c:1]C#N"),
+    ("amide",       "[c;H1:1]>>[c:1]C(=O)N"),
+    ("carboxyl",    "[c;H1:1]>>[c:1]C(=O)O"),
+    ("CF3",         "[c;H1:1]>>[c:1]C(F)(F)F"),
+    ("phenyl",      "[c;H1:1]>>[c:1]c1ccccc1"),
+    ("pyridyl",     "[c;H1:1]>>[c:1]c1ccncc1"),
+    ("piperidyl",   "[c;H1:1]>>[c:1]C1CCNCC1"),
+    ("morpholinyl", "[c;H1:1]>>[c:1]C1CCOCC1"),
+    ("sulfonamide", "[c;H1:1]>>[c:1]S(=O)(=O)N"),
+    ("acetamide",   "[N;H1:1]>>[N:1]C(=O)C"),
 ]
 
 _COMPILED_REACTIONS = [
-    (label, AllChem.ReactionFromSmarts(smarts))
+    (label, ReactionFromSmarts(smarts))
     for label, smarts in _REACTION_SMARTS
 ]
 
