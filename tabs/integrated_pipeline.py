@@ -126,12 +126,26 @@ def create_tab():
                 "GrowMax grows a seed fragment into novel candidates using AutoDock Vina scoring."
             ),
         )
-        fragment_input = gr.Textbox(
-            label="Seed Fragment SMILES (GrowMax only)",
-            placeholder="e.g., c1ccccc1  (benzene)   or   CC(=O)N  (acetamide)",
-            lines=1,
-            visible=False,
-        )
+        with gr.Column(visible=False) as fragment_col:
+            fragment_input = gr.Textbox(
+                label="Seed Fragment SMILES",
+                placeholder="e.g., c1ccccc1",
+                lines=1,
+            )
+            gr.Examples(
+                examples=[
+                    ["c1ccccc1"],
+                    ["c1ccncc1"],
+                    ["c1cnccn1"],
+                    ["c1cnc[nH]1"],
+                    ["c1ccsc1"],
+                    ["C1CCNCC1"],
+                    ["c1ccc(O)cc1"],
+                    ["CC(=O)N"],
+                ],
+                inputs=fragment_input,
+                label="Example seed fragments",
+            )
 
         run_pipeline_btn = gr.Button(
             "🚀 Run Complete Pipeline",
@@ -397,5 +411,5 @@ def create_tab():
         strategy_radio.change(
             lambda s: gr.update(visible=s == "GrowMax (Fragment Growing)"),
             inputs=[strategy_radio],
-            outputs=[fragment_input],
+            outputs=[fragment_col],
         )
