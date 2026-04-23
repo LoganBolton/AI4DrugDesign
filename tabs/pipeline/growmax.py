@@ -44,47 +44,73 @@ def _is_drug_like(mol) -> bool:
     )
 
 
-def generate_variants(seed_smiles: str, max_variants: int = 200) -> list[tuple[str, str]]:
-    """
-    Enumerate grown molecules by replacing one H on the seed with each growth fragment.
+def _grow_one_round(parent_smiles_list, seen, max_variants, round_num):
+    """Grow every molecule in parent_smiles_list by one step. Returns new (smiles, label) pairs."""
+    new_variants: list[tuple[str, str]] = []
+    label_suffix = f"_r{round_num}"
 
-    Returns a list of (canonical_smiles, fragment_label) tuples, at most max_variants.
+    for parent_smiles in parent_smiles_list:
+        parent = Chem.MolFromSmiles(parent_smiles)
+        if parent is None:
+            continue
+        for label, rxn in _COMPILED_REACTIONS:
+            try:
+                products = rxn.RunReactants((parent,))
+            except Exception:
+                continue
+            for prod_tuple in products:
+                if not prod_tuple:
+                    continue
+                prod = prod_tuple[0]
+                try:
+                    Chem.SanitizeMol(prod)
+                except Exception:
+                    continue
+                if not _is_drug_like(prod):
+                    continue
+                canon = Chem.MolToSmiles(prod)
+                if canon in seen:
+                    continue
+                seen.add(canon)
+                new_variants.append((canon, label + label_suffix))
+                if len(new_variants) >= max_variants:
+                    return new_variants
+
+    return new_variants
+
+
+def generate_variants(
+    seed_smiles: str, max_variants: int = 200, rounds: int = 2
+) -> list[tuple[str, str]]:
+    """
+    Iteratively grow the seed fragment for `rounds` steps.
+
+    Each round takes the previous round's new variants as parents and grows them
+    one step further. Returns at most max_variants (canonical_smiles, label) tuples.
     """
     seed = Chem.MolFromSmiles(seed_smiles)
     if seed is None:
         raise ValueError(f"Invalid SMILES: {seed_smiles}")
 
-    seen = {Chem.MolToSmiles(seed)}
-    variants: list[tuple[str, str]] = []
+    seen: set[str] = {Chem.MolToSmiles(seed)}
+    all_variants: list[tuple[str, str]] = []
+    current_gen = [Chem.MolToSmiles(seed)]
 
-    for label, rxn in _COMPILED_REACTIONS:
-        try:
-            products = rxn.RunReactants((seed,))
-        except Exception:
-            continue
+    for round_num in range(1, rounds + 1):
+        remaining = max_variants - len(all_variants)
+        if remaining <= 0:
+            break
+        new = _grow_one_round(current_gen, seen, remaining, round_num)
+        all_variants.extend(new)
+        current_gen = [smi for smi, _ in new]
+        logger.info(f"GrowMax round {round_num}: {len(new)} new variants (total {len(all_variants)})")
+        if not current_gen:
+            break
 
-        for prod_tuple in products:
-            if not prod_tuple:
-                continue
-            prod = prod_tuple[0]
-            try:
-                Chem.SanitizeMol(prod)
-            except Exception:
-                continue
-            if not _is_drug_like(prod):
-                continue
-            canon = Chem.MolToSmiles(prod)
-            if canon in seen:
-                continue
-            seen.add(canon)
-            variants.append((canon, label))
-            if len(variants) >= max_variants:
-                return variants
-
-    return variants
+    return all_variants
 
 
-def fetch_growmax_compounds(seed_smiles: str, max_variants: int = 200):
+def fetch_growmax_compounds(seed_smiles: str, max_variants: int = 200, rounds: int = 2):
     """
     Generate drug candidates by growing a seed fragment.
 
@@ -100,8 +126,10 @@ def fetch_growmax_compounds(seed_smiles: str, max_variants: int = 200):
     if Chem.MolFromSmiles(seed_smiles) is None:
         return "**Step 2 – GrowMax:** ❌ Invalid SMILES string", None, None
 
+    rounds = max(1, min(int(rounds), 3))
+
     try:
-        variants = generate_variants(seed_smiles, max_variants)
+        variants = generate_variants(seed_smiles, max_variants, rounds)
     except Exception as exc:
         logger.exception(f"GrowMax variant generation failed: {exc}")
         return f"**Step 2 – GrowMax:** ❌ {exc}", None, None
@@ -129,14 +157,15 @@ def fetch_growmax_compounds(seed_smiles: str, max_variants: int = 200):
     rows = [
         {
             "Name": c["name"],
-            "Added Fragment": c["name"].rsplit("_", 1)[0],
+            "Round": c["name"].split("_r")[-1] if "_r" in c["name"] else "1",
             "SMILES": c["smiles"][:60] + ("..." if len(c["smiles"]) > 60 else ""),
         }
         for c in compounds
     ]
 
     status = (
-        f"**Step 2 – GrowMax:** ✅ Generated {len(compounds)} variants from seed fragment"
+        f"**Step 2 – GrowMax:** ✅ Generated {len(compounds)} variants "
+        f"({rounds} round{'s' if rounds > 1 else ''} of growth)"
     )
-    logger.info(f"=== STEP 2 (GrowMax) COMPLETE: {len(compounds)} variants ===")
+    logger.info(f"=== STEP 2 (GrowMax) COMPLETE: {len(compounds)} variants, {rounds} rounds ===")
     return status, compounds, pd.DataFrame(rows)

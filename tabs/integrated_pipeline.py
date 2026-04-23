@@ -38,14 +38,16 @@ from tabs.pipeline.protein import (
 # ── Orchestration helpers ─────────────────────────────────────────────
 
 
-def _run_protein_and_step2(pdb_id, strategy, fragment_smiles):
+def _run_protein_and_step2(pdb_id, strategy, fragment_smiles, growth_rounds):
     """Run protein analysis and step 2 (ChEMBL or GrowMax) in parallel."""
     logger.info(f"=== Starting parallel execution: Protein Analysis + Step 2 ({strategy}) ===")
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         protein_future = executor.submit(analyze_protein, pdb_id)
         if strategy == "GrowMax (Fragment Growing)":
-            step2_future = executor.submit(fetch_growmax_compounds, fragment_smiles)
+            step2_future = executor.submit(
+                fetch_growmax_compounds, fragment_smiles, 200, int(growth_rounds)
+            )
         else:
             step2_future = executor.submit(fetch_compounds, pdb_id)
 
@@ -127,11 +129,22 @@ def create_tab():
             ),
         )
         with gr.Column(visible=False) as fragment_col:
-            fragment_input = gr.Textbox(
-                label="Seed Fragment SMILES",
-                placeholder="e.g., c1ccccc1",
-                lines=1,
-            )
+            with gr.Row():
+                fragment_input = gr.Textbox(
+                    label="Seed Fragment SMILES",
+                    placeholder="e.g., c1ccccc1",
+                    lines=1,
+                    scale=3,
+                )
+                growth_rounds_input = gr.Number(
+                    label="Growth Rounds",
+                    value=2,
+                    minimum=1,
+                    maximum=3,
+                    step=1,
+                    scale=1,
+                    info="1 = one substitution, 2–3 = iterative growing toward drug-sized molecules",
+                )
             gr.Examples(
                 examples=[
                     ["c1ccccc1"],
@@ -324,7 +337,7 @@ def create_tab():
             **_progress_args,
         ).then(
             _run_protein_and_step2,
-            inputs=[pdb_input, strategy_radio, fragment_input],
+            inputs=[pdb_input, strategy_radio, fragment_input, growth_rounds_input],
             outputs=[protein_status, protein_text, protein_state, viewer_html,
                      compounds_status, all_compounds_state, compounds_table],
             **_progress_args,
