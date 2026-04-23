@@ -20,24 +20,53 @@ VIEWER_PLACEHOLDER = (
 
 
 def build_3d_viewer_html(pdb_id: str) -> str:
-    """Build an iframe with 3Dmol.js to display a protein structure."""
+    """Build an iframe with 3Dmol.js to display a protein structure with binding site highlighted."""
     inner = (
         "<!DOCTYPE html>"
         "<html><head>"
         "<script src='https://3Dmol.org/build/3Dmol-min.js'></script>"
-        "<style>body{margin:0;padding:0;overflow:hidden}"
-        "#v{width:100%;height:100%;position:absolute}</style>"
-        "</head><body><div id='v'></div><script>"
-        "$(function(){"
+        "<style>"
+        "body{margin:0;padding:0;overflow:hidden;background:#fff}"
+        "#v{width:100%;height:100%;position:absolute;top:0;left:0}"
+        "#legend{position:absolute;bottom:8px;left:8px;z-index:10;"
+        "background:rgba(255,255,255,0.88);padding:6px 10px;border-radius:6px;"
+        "font-size:11px;font-family:sans-serif;line-height:1.9;pointer-events:none;"
+        "box-shadow:0 1px 4px rgba(0,0,0,0.15)}"
+        ".dot{display:inline-block;width:11px;height:11px;border-radius:50%;"
+        "margin-right:5px;vertical-align:middle}"
+        "</style>"
+        "</head><body>"
+        "<div id='v'></div>"
+        "<div id='legend'>"
+        "<b style='font-size:12px'>Binding Site</b><br>"
+        "<div><span class='dot' style='background:linear-gradient(135deg,#6af,#fa6)'></span>Protein backbone</div>"
+        "<div><span class='dot' style='background:#00bcd4'></span>Receptor pocket residues</div>"
+        "<div><span class='dot' style='background:#ff9800'></span>Co-crystallized ligand</div>"
+        "</div>"
+        "<script>"
+        "window.addEventListener('load',function(){"
         "var v=$3Dmol.createViewer('v',{backgroundColor:'white'});"
-        "jQuery.ajax({url:'https://files.rcsb.org/download/" + pdb_id + ".pdb',"
-        "success:function(d){"
+        "fetch('https://files.rcsb.org/download/" + pdb_id + ".pdb')"
+        ".then(function(r){return r.ok?r.text():Promise.reject(r.status);})"
+        ".then(function(d){"
         "v.addModel(d,'pdb');"
         "v.setStyle({},{cartoon:{color:'spectrum'}});"
-        "v.zoomTo();v.render();},"
-        "error:function(){"
+        "v.setStyle("
+        "{byres:true,within:{distance:5,sel:{hetflag:true}}},"
+        "{cartoon:{color:'#00bcd4'},stick:{colorscheme:'Jmol',radius:0.15,opacity:1.0}}"
+        ");"
+        "v.setStyle("
+        "{hetflag:true},"
+        "{stick:{radius:0.28,colorscheme:'Jmol'},sphere:{scale:0.32,colorscheme:'Jmol'}}"
+        ");"
+        "v.zoomTo();v.render();"
+        "document.getElementById('v').addEventListener('wheel',function(e){"
+        "e.preventDefault();e.stopImmediatePropagation();"
+        "v.zoom(e.deltaY<0?1.05:1/1.05);v.render();"
+        "},{passive:false,capture:true});})"
+        ".catch(function(){"
         "document.getElementById('v').innerHTML="
-        "'<p style=padding:20px>Could not load structure.</p>';}});"
+        "'<p style=padding:20px>Could not load structure.</p>';});"
         "});</script></body></html>"
     )
     escaped = html_module.escape(inner, quote=True)
@@ -61,7 +90,7 @@ def fetch_protein_info(pdb_id: str) -> dict:
     title = entry.get("struct", {}).get("title", "N/A")
     keywords = entry.get("struct_keywords", {}).get("pdbx_keywords", "N/A")
 
-    # Organism
+    # Organism — dhvani's fix: iterate per-entity via polymer_entity_ids for reliable lookup
     organisms = []
     try:
         polymer_entity_ids = entry.get(
@@ -132,7 +161,7 @@ def fetch_protein_info(pdb_id: str) -> dict:
         "title": title,
         "classification": keywords,
         "organism": ", ".join(organisms) if organisms else "N/A",
-        "resolution": f"{resolution} \u00c5" if resolution else "N/A",
+        "resolution": f"{resolution} Å" if resolution else "N/A",
         "ligands": ligands,
         "binding_sites": binding_sites,
     }
