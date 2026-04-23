@@ -26,6 +26,7 @@ from tabs.pipeline.detail import (
 )
 from tabs.pipeline.docking import rank_by_activity
 from tabs.pipeline.filters import apply_adme_filter, apply_rule_of_5
+from tabs.pipeline.growmax import fetch_growmax_compounds
 from tabs.pipeline.helpers import logger
 from tabs.pipeline.protein import (
     VIEWER_PLACEHOLDER,
@@ -37,29 +38,37 @@ from tabs.pipeline.protein import (
 # ── Orchestration helpers ─────────────────────────────────────────────
 
 
-def _run_protein_and_compounds_parallel(pdb_id):
-    """Run protein analysis and compound discovery in parallel."""
-    logger.info("=== Starting parallel execution: Protein Analysis + Compound Discovery ===")
+def _run_protein_and_step2(pdb_id, strategy, fragment_smiles):
+    """Run protein analysis and step 2 (ChEMBL or GrowMax) in parallel."""
+    logger.info(f"=== Starting parallel execution: Protein Analysis + Step 2 ({strategy}) ===")
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         protein_future = executor.submit(analyze_protein, pdb_id)
-        compound_future = executor.submit(fetch_compounds, pdb_id)
+        if strategy == "GrowMax (Fragment Growing)":
+            step2_future = executor.submit(fetch_growmax_compounds, fragment_smiles)
+        else:
+            step2_future = executor.submit(fetch_compounds, pdb_id)
 
         protein_results = protein_future.result()
-        compound_results = compound_future.result()
+        step2_results = step2_future.result()
 
     logger.info("=== Parallel execution complete ===")
 
     # protein_results: (status, text, info, viewer)
-    # compound_results: (status, compounds, table)
-    return (*protein_results, *compound_results)
+    # step2_results: (status, compounds, table)
+    return (*protein_results, *step2_results)
 
 
-def _pipeline_initial_status():
+def _pipeline_initial_status(strategy):
     """Reset UI and set all step statuses to their initial running/waiting state."""
+    step2_msg = (
+        "**Step 2 – GrowMax:** 🔄 Growing fragment variants..."
+        if strategy == "GrowMax (Fragment Growing)"
+        else "**Step 2 – Compounds:** 🔄 Fetching from ChEMBL..."
+    )
     return (
         "**Step 1 – Protein:** 🔄 Analyzing structure from RCSB PDB...",
-        "**Step 2 – Compounds:** 🔄 Fetching from ChEMBL...",
+        step2_msg,
         "**Step 3 – Rule of 5:** ⏳ Waiting...",
         "**Step 4 – Docking:** ⏳ Waiting...",
         "**Step 5 – ADME:** ⏳ Waiting...",
@@ -107,6 +116,22 @@ def create_tab():
                 step=1,
                 scale=1,
             )
+
+        strategy_radio = gr.Radio(
+            choices=["Standard (ChEMBL)", "GrowMax (Fragment Growing)"],
+            value="Standard (ChEMBL)",
+            label="Discovery Strategy",
+            info=(
+                "Standard fetches known bioactives from ChEMBL. "
+                "GrowMax grows a seed fragment into novel candidates using AutoDock Vina scoring."
+            ),
+        )
+        fragment_input = gr.Textbox(
+            label="Seed Fragment SMILES (GrowMax only)",
+            placeholder="e.g., c1ccccc1  (benzene)   or   CC(=O)N  (acetamide)",
+            lines=1,
+            visible=False,
+        )
 
         run_pipeline_btn = gr.Button(
             "🚀 Run Complete Pipeline",
@@ -277,14 +302,15 @@ def create_tab():
 
         run_pipeline_btn.click(
             _pipeline_initial_status,
+            inputs=[strategy_radio],
             outputs=[protein_status, compounds_status,
                      ro5_status, rank_status, adme_status,
                      detail_text, detail_image, compound_3d_viewer,
                      docked_viewer_html, compound_explanation],
             **_progress_args,
         ).then(
-            _run_protein_and_compounds_parallel,
-            inputs=[pdb_input],
+            _run_protein_and_step2,
+            inputs=[pdb_input, strategy_radio, fragment_input],
             outputs=[protein_status, protein_text, protein_state, viewer_html,
                      compounds_status, all_compounds_state, compounds_table],
             **_progress_args,
@@ -366,4 +392,10 @@ def create_tab():
             ai_explain_compound,
             inputs=[selected_state, protein_state],
             outputs=[compound_explanation],
+        )
+
+        strategy_radio.change(
+            lambda s: gr.update(visible=s == "GrowMax (Fragment Growing)"),
+            inputs=[strategy_radio],
+            outputs=[fragment_input],
         )
