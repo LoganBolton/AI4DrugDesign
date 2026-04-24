@@ -2,7 +2,7 @@
 
 import pandas as pd
 from rdkit import Chem, DataStructs
-from rdkit.Chem import Descriptors, rdMolDescriptors
+from rdkit.Chem import Descriptors, QED, rdMolDescriptors
 from rdkit.Chem.rdChemReactions import ReactionFromSmarts
 from rdkit.SimDivFilters import rdSimDivPickers
 
@@ -365,10 +365,18 @@ def run_score_guided_growth(
                 break
 
             _, ro5_filtered, _ = apply_rule_of_5(next_variants)
-            current_pool = ro5_filtered or []
+            ro5_filtered = ro5_filtered or []
+
+            # Pre-sort by QED descending so the dock slice gets the most drug-like compounds
+            def _qed(c):
+                mol = Chem.MolFromSmiles(c["smiles"])
+                return QED.qed(mol) if mol else 0.0
+
+            ro5_filtered.sort(key=_qed, reverse=True)
+            current_pool = ro5_filtered
             logger.info(
                 f"GrowMax: {len(next_variants)} round-{round_num + 1} variants, "
-                f"{len(current_pool)} passed Ro5"
+                f"{len(current_pool)} passed Ro5, sorted by QED"
             )
 
     except Exception as exc:

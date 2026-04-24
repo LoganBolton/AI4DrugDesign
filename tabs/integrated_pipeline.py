@@ -442,7 +442,7 @@ def create_tab():
         strategy_radio.change(
             lambda s: (
                 gr.update(visible=s == "GrowMax (Fragment Growing)"),
-                gr.update(value=30 if s == "GrowMax (Fragment Growing)" else 10),
+                gr.update(value=50 if s == "GrowMax (Fragment Growing)" else 10),
             ),
             inputs=[strategy_radio],
             outputs=[fragment_col, num_dock_input],
