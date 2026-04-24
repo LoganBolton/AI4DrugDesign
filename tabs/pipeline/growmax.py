@@ -272,10 +272,12 @@ def run_score_guided_growth(
         receptor_pdbqt = os.path.join(tmpdir, "receptor.pdbqt")
         prepare_receptor_pdbqt(pdb_path, receptor_pdbqt)
 
-        import random
         seen_smiles: set[str] = {c["smiles"] for c in round1_compounds}
-        current_pool = list(round1_compounds)
-        random.shuffle(current_pool)
+        current_pool = sorted(
+            round1_compounds,
+            key=lambda c: QED.qed(Chem.MolFromSmiles(c["smiles"])) if Chem.MolFromSmiles(c["smiles"]) else 0.0,
+            reverse=True,
+        )
 
         for round_num in range(1, rounds + 1):
             if not current_pool:
