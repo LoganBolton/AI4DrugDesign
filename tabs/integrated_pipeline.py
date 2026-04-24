@@ -26,7 +26,7 @@ from tabs.pipeline.detail import (
 )
 from tabs.pipeline.docking import rank_by_activity
 from tabs.pipeline.filters import apply_adme_filter, apply_rule_of_5
-from tabs.pipeline.growmax import fetch_growmax_compounds
+from tabs.pipeline.growmax import fetch_growmax_compounds, run_score_guided_growth
 from tabs.pipeline.helpers import logger
 from tabs.pipeline.protein import (
     VIEWER_PLACEHOLDER,
@@ -38,16 +38,14 @@ from tabs.pipeline.protein import (
 # ── Orchestration helpers ─────────────────────────────────────────────
 
 
-def _run_protein_and_step2(pdb_id, strategy, fragment_smiles, growth_rounds):
+def _run_protein_and_step2(pdb_id, strategy, fragment_smiles):
     """Run protein analysis and step 2 (ChEMBL or GrowMax) in parallel."""
     logger.info(f"=== Starting parallel execution: Protein Analysis + Step 2 ({strategy}) ===")
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         protein_future = executor.submit(analyze_protein, pdb_id)
         if strategy == "GrowMax (Fragment Growing)":
-            step2_future = executor.submit(
-                fetch_growmax_compounds, fragment_smiles, 200, int(growth_rounds)
-            )
+            step2_future = executor.submit(fetch_growmax_compounds, fragment_smiles)
         else:
             step2_future = executor.submit(fetch_compounds, pdb_id)
 
@@ -59,6 +57,20 @@ def _run_protein_and_step2(pdb_id, strategy, fragment_smiles, growth_rounds):
     # protein_results: (status, text, info, viewer)
     # step2_results: (status, compounds, table)
     return (*protein_results, *step2_results)
+
+
+def _rank_compounds(ro5_state, protein_state, num_dock, strategy, growth_rounds):
+    """Branch between standard docking and score-guided GrowMax growth."""
+    if strategy == "GrowMax (Fragment Growing)":
+        yield from run_score_guided_growth(
+            ro5_state,
+            protein_state,
+            rounds=int(growth_rounds),
+            dock_per_round=20,
+            top_k=10,
+        )
+        return
+    yield rank_by_activity(ro5_state, protein_state, num_dock)
 
 
 def _pipeline_initial_status(strategy):
@@ -138,12 +150,12 @@ def create_tab():
                 )
                 growth_rounds_input = gr.Number(
                     label="Growth Rounds",
-                    value=2,
+                    value=3,
                     minimum=1,
                     maximum=3,
                     step=1,
                     scale=1,
-                    info="1 = one substitution, 2–3 = iterative growing toward drug-sized molecules",
+                    info="Each round docks the current pool, then grows from the top 10 scorers. 3 recommended.",
                 )
             gr.Examples(
                 examples=[
@@ -337,7 +349,7 @@ def create_tab():
             **_progress_args,
         ).then(
             _run_protein_and_step2,
-            inputs=[pdb_input, strategy_radio, fragment_input, growth_rounds_input],
+            inputs=[pdb_input, strategy_radio, fragment_input],
             outputs=[protein_status, protein_text, protein_state, viewer_html,
                      compounds_status, all_compounds_state, compounds_table],
             **_progress_args,
@@ -351,12 +363,17 @@ def create_tab():
             outputs=[ro5_status, ro5_state, ro5_table],
             **_progress_args,
         ).then(
-            lambda: "**Step 4 – Docking:** 🔄 Running AutoDock Vina...",
+            lambda s: (
+                "**Step 4 – Docking:** 🔄 Running score-guided growth..."
+                if s == "GrowMax (Fragment Growing)"
+                else "**Step 4 – Docking:** 🔄 Running AutoDock Vina..."
+            ),
+            inputs=[strategy_radio],
             outputs=[rank_status],
             **_progress_args,
         ).then(
-            rank_by_activity,
-            inputs=[ro5_state, protein_state, num_dock_input],
+            _rank_compounds,
+            inputs=[ro5_state, protein_state, num_dock_input, strategy_radio, growth_rounds_input],
             outputs=[rank_status, ranked_state, rank_table],
             **_progress_args,
         ).then(

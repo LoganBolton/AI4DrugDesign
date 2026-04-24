@@ -110,14 +110,15 @@ def generate_variants(
     return all_variants
 
 
-def fetch_growmax_compounds(seed_smiles: str, max_variants: int = 200, rounds: int = 2):
+def fetch_growmax_compounds(seed_smiles: str, max_variants: int = 200):
     """
-    Generate drug candidates by growing a seed fragment.
+    Generate round 1 seed variants from a fragment.
 
-    Returns (status, compounds, df) — identical format to fetch_compounds so
-    the rest of the pipeline (Ro5 → Vina → ADME) is reused unchanged.
+    Returns (status, compounds, df) — identical format to fetch_compounds.
+    Score-guided growth across subsequent rounds is handled by run_score_guided_growth
+    during the docking step.
     """
-    logger.info("=== STEP 2 (GrowMax): Growing fragment variants ===")
+    logger.info("=== STEP 2 (GrowMax): Generating seed variants ===")
 
     seed_smiles = (seed_smiles or "").strip()
     if not seed_smiles:
@@ -126,10 +127,8 @@ def fetch_growmax_compounds(seed_smiles: str, max_variants: int = 200, rounds: i
     if Chem.MolFromSmiles(seed_smiles) is None:
         return "**Step 2 – GrowMax:** ❌ Invalid SMILES string", None, None
 
-    rounds = max(1, min(int(rounds), 3))
-
     try:
-        variants = generate_variants(seed_smiles, max_variants, rounds)
+        variants = generate_variants(seed_smiles, max_variants, rounds=1)
     except Exception as exc:
         logger.exception(f"GrowMax variant generation failed: {exc}")
         return f"**Step 2 – GrowMax:** ❌ {exc}", None, None
@@ -157,15 +156,216 @@ def fetch_growmax_compounds(seed_smiles: str, max_variants: int = 200, rounds: i
     rows = [
         {
             "Name": c["name"],
-            "Round": c["name"].split("_r")[-1] if "_r" in c["name"] else "1",
             "SMILES": c["smiles"][:60] + ("..." if len(c["smiles"]) > 60 else ""),
         }
         for c in compounds
     ]
 
-    status = (
-        f"**Step 2 – GrowMax:** ✅ Generated {len(compounds)} variants "
-        f"({rounds} round{'s' if rounds > 1 else ''} of growth)"
-    )
-    logger.info(f"=== STEP 2 (GrowMax) COMPLETE: {len(compounds)} variants, {rounds} rounds ===")
+    status = f"**Step 2 – GrowMax:** ✅ Generated {len(compounds)} seed variants (round 1)"
+    logger.info(f"=== STEP 2 (GrowMax) COMPLETE: {len(compounds)} seed variants ===")
     return status, compounds, pd.DataFrame(rows)
+
+
+def _ligand_efficiency(affinity: float, smiles: str) -> float:
+    """Ligand efficiency = |affinity| / heavy atom count. Higher is better."""
+    mol = Chem.MolFromSmiles(smiles)
+    hac = mol.GetNumHeavyAtoms() if mol else 1
+    return round(abs(affinity) / max(hac, 1), 3)
+
+
+def run_score_guided_growth(
+    round1_compounds: list,
+    protein_info: dict,
+    rounds: int = 3,
+    dock_per_round: int = 20,
+    top_k: int = 10,
+):
+    """
+    Score-guided GrowMax: dock → rank by LE → grow top K → dock → repeat.
+
+    Generator — yields (status, None, None) progress updates during each round,
+    then a final (status, all_docked, df) on completion. Gradio streams each
+    yield to the UI so the user sees round-by-round progress.
+
+    Parent selection uses ligand efficiency (LE = |affinity| / HAC) rather than
+    raw affinity, so smaller compounds that bind efficiently are preferred over
+    large compounds with marginally better scores.
+    """
+    import os
+    import shutil
+    import tempfile
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
+    from tabs.pipeline.docking import (
+        calculate_optimal_workers,
+        fetch_pdb_file,
+        find_binding_center,
+        prepare_receptor_pdbqt,
+    )
+    from tabs.pipeline.docking_worker import dock_single_compound
+    from tabs.pipeline.filters import apply_rule_of_5
+
+    if not round1_compounds:
+        yield "**Step 4 – Docking:** ❌ No seed compounds to grow from", None, None
+        return
+    if not protein_info:
+        yield "**Step 4 – Docking:** ❌ No protein info available", None, None
+        return
+
+    logger.info(
+        f"=== Score-guided GrowMax: {rounds} rounds, "
+        f"{dock_per_round}/round, top {top_k} grown by LE ==="
+    )
+
+    pdb_id = protein_info["pdb_id"]
+    yield f"**Step 4 – Docking:** 🔄 Preparing receptor ({pdb_id})...", None, None
+
+    try:
+        pdb_text = fetch_pdb_file(pdb_id)
+        center = find_binding_center(pdb_text)
+    except Exception as exc:
+        yield f"**Step 4 – Docking:** ❌ Failed to fetch receptor: {exc}", None, None
+        return
+
+    tmpdir = tempfile.mkdtemp()
+    all_docked: list[dict] = []
+
+    try:
+        pdb_path = os.path.join(tmpdir, "receptor.pdb")
+        with open(pdb_path, "w") as f:
+            f.write(pdb_text)
+        receptor_pdbqt = os.path.join(tmpdir, "receptor.pdbqt")
+        prepare_receptor_pdbqt(pdb_path, receptor_pdbqt)
+
+        seen_smiles: set[str] = {c["smiles"] for c in round1_compounds}
+        current_pool = list(round1_compounds)
+
+        for round_num in range(1, rounds + 1):
+            if not current_pool:
+                logger.warning(f"GrowMax round {round_num}: empty pool, stopping early")
+                break
+
+            to_dock = current_pool[:dock_per_round]
+            yield (
+                f"**Step 4 – Docking:** 🔄 Round {round_num}/{rounds}: "
+                f"docking {len(to_dock)} compounds...",
+                None, None,
+            )
+            logger.info(f"GrowMax round {round_num}: docking {len(to_dock)} compounds")
+
+            num_workers = min(calculate_optimal_workers(), len(to_dock))
+            dock_args = [
+                (i, to_dock[i]["smiles"], receptor_pdbqt, center)
+                for i in range(len(to_dock))
+            ]
+
+            with ProcessPoolExecutor(max_workers=num_workers) as executor:
+                futures = {
+                    executor.submit(dock_single_compound, arg): arg[0]
+                    for arg in dock_args
+                }
+                for future in as_completed(futures):
+                    idx, affinity, docked_sdf = future.result()
+                    to_dock[idx]["vina_affinity"] = round(affinity, 2)
+                    to_dock[idx]["docked_sdf"] = docked_sdf
+                    to_dock[idx]["docked"] = True
+                    to_dock[idx]["growth_round"] = round_num
+                    to_dock[idx]["ligand_efficiency"] = _ligand_efficiency(
+                        affinity, to_dock[idx]["smiles"]
+                    )
+
+            round_docked = [
+                c for c in to_dock
+                if c.get("docked") and c.get("vina_affinity") != float("inf")
+            ]
+            # Sort by LE descending — efficient binders make better growth parents
+            round_docked.sort(key=lambda x: x.get("ligand_efficiency", 0), reverse=True)
+            all_docked.extend(round_docked)
+
+            best = round_docked[0] if round_docked else None
+            best_str = (
+                f"best −{abs(best['vina_affinity']):.1f} kcal/mol "
+                f"(LE {best['ligand_efficiency']:.2f})"
+                if best else "none docked"
+            )
+            yield (
+                f"**Step 4 – Docking:** 🔄 Round {round_num}/{rounds} complete — "
+                f"{len(round_docked)} docked, {best_str}",
+                None, None,
+            )
+            logger.info(f"GrowMax round {round_num}: {len(round_docked)} docked, {best_str}")
+
+            if round_num >= rounds:
+                break
+
+            top_parents = round_docked[:top_k]
+            if not top_parents:
+                logger.warning(f"GrowMax round {round_num}: no successful docks, stopping")
+                break
+
+            yield (
+                f"**Step 4 – Docking:** 🔄 Round {round_num}/{rounds}: "
+                f"growing from top {len(top_parents)} by ligand efficiency...",
+                None, None,
+            )
+
+            next_variants: list[dict] = []
+            for parent in top_parents:
+                for smi, label in generate_variants(parent["smiles"], max_variants=30, rounds=1):
+                    if smi not in seen_smiles:
+                        seen_smiles.add(smi)
+                        next_variants.append({
+                            "smiles": smi,
+                            "name": f"{label}_r{round_num + 1}",
+                            "chembl_id": "GrowMax",
+                            "activity_type": "fragment-grown",
+                            "activity_value": None,
+                            "activity_units": "",
+                        })
+
+            if not next_variants:
+                logger.warning(f"GrowMax round {round_num}: no new variants generated")
+                break
+
+            _, ro5_filtered, _ = apply_rule_of_5(next_variants)
+            current_pool = ro5_filtered or []
+            logger.info(
+                f"GrowMax: {len(next_variants)} round-{round_num + 1} variants, "
+                f"{len(current_pool)} passed Ro5"
+            )
+
+    except Exception as exc:
+        logger.exception(f"Score-guided growth failed: {exc}")
+        yield f"**Step 4 – Docking:** ❌ {exc}", None, None
+        return
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+    if not all_docked:
+        yield "**Step 4 – Docking:** ❌ No compounds successfully docked", None, None
+        return
+
+    # Final display sort: affinity ascending (LE already used for parent selection)
+    all_docked.sort(key=lambda x: x.get("vina_affinity", float("inf")))
+    for i, c in enumerate(all_docked):
+        c["binding_rank"] = i + 1
+
+    rows = []
+    for c in all_docked[:500]:
+        rows.append({
+            "Rank": c["binding_rank"],
+            "Name": c["name"][:25],
+            "Round": c.get("growth_round", 1),
+            "Vina (kcal/mol)": f"{c['vina_affinity']:.2f}",
+            "LE": f"{c.get('ligand_efficiency', 0):.3f}",
+            "MW": c.get("mw", ""),
+            "LogP": c.get("logp", ""),
+        })
+
+    n_rounds_done = max((c.get("growth_round", 1) for c in all_docked), default=1)
+    status = (
+        f"**Step 4 – Docking:** ✅ Score-guided growth complete — "
+        f"{len(all_docked)} compounds across {n_rounds_done} rounds"
+    )
+    logger.info(f"=== Score-guided GrowMax COMPLETE: {len(all_docked)} compounds ===")
+    yield status, all_docked, pd.DataFrame(rows)
