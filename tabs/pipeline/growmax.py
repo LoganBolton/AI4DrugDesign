@@ -1,9 +1,10 @@
 """GrowMax — fragment-based molecule growing for drug candidate generation."""
 
 import pandas as pd
-from rdkit import Chem
-from rdkit.Chem import Descriptors
+from rdkit import Chem, DataStructs
+from rdkit.Chem import Descriptors, rdMolDescriptors
 from rdkit.Chem.rdChemReactions import ReactionFromSmarts
+from rdkit.SimDivFilters import rdSimDivPickers
 
 from tabs.pipeline.helpers import logger
 
@@ -173,6 +174,40 @@ def _ligand_efficiency(affinity: float, smiles: str) -> float:
     return round(abs(affinity) / max(hac, 1), 3)
 
 
+def _diverse_top_k(candidates: list, top_k: int) -> list:
+    """
+    Select top_k diverse parents using MaxMin Tanimoto picking seeded at the
+    best-LE compound. Candidates must be pre-sorted by LE descending.
+
+    This prevents all growth parents converging on one chemical series when a
+    single scaffold dominates the LE ranking.
+    """
+    if len(candidates) <= top_k:
+        return candidates
+
+    fps = []
+    valid = []
+    for c in candidates:
+        mol = Chem.MolFromSmiles(c["smiles"])
+        if mol is None:
+            continue
+        fp = rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, radius=2, nBits=2048)
+        fps.append(fp)
+        valid.append(c)
+
+    if len(valid) <= top_k:
+        return valid
+
+    picker = rdSimDivPickers.MaxMinPicker()
+    # firstPicks=[0] seeds with the best-LE compound so it's always included
+    indices = list(picker.LazyBitVectorPick(fps, len(valid), top_k, firstPicks=[0]))
+    selected = [valid[i] for i in indices]
+    logger.info(
+        f"Diversity picker: selected {len(selected)} parents from {len(valid)} candidates"
+    )
+    return selected
+
+
 def run_score_guided_growth(
     round1_compounds: list,
     protein_info: dict,
@@ -300,14 +335,14 @@ def run_score_guided_growth(
             if round_num >= rounds:
                 break
 
-            top_parents = round_docked[:top_k]
+            top_parents = _diverse_top_k(round_docked, top_k)
             if not top_parents:
                 logger.warning(f"GrowMax round {round_num}: no successful docks, stopping")
                 break
 
             yield (
                 f"**Step 4 – Docking:** 🔄 Round {round_num}/{rounds}: "
-                f"growing from top {len(top_parents)} by ligand efficiency...",
+                f"growing from {len(top_parents)} diverse parents...",
                 None, None,
             )
 

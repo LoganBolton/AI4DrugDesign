@@ -66,7 +66,7 @@ def _rank_compounds(ro5_state, protein_state, num_dock, strategy, growth_rounds)
             ro5_state,
             protein_state,
             rounds=int(growth_rounds),
-            dock_per_round=20,
+            dock_per_round=int(num_dock),
             top_k=10,
         )
         return
@@ -129,6 +129,7 @@ def create_tab():
                 maximum=500,
                 step=1,
                 scale=1,
+                info="ChEMBL: total docked. GrowMax: docked per round (×rounds = total).",
             )
 
         strategy_radio = gr.Radio(
@@ -152,7 +153,7 @@ def create_tab():
                     label="Growth Rounds",
                     value=3,
                     minimum=1,
-                    maximum=3,
+                    maximum=4,
                     step=1,
                     scale=1,
                     info="Each round docks the current pool, then grows from the top 10 scorers. 3 recommended.",
@@ -439,7 +440,10 @@ def create_tab():
         )
 
         strategy_radio.change(
-            lambda s: gr.update(visible=s == "GrowMax (Fragment Growing)"),
+            lambda s: (
+                gr.update(visible=s == "GrowMax (Fragment Growing)"),
+                gr.update(value=30 if s == "GrowMax (Fragment Growing)" else 10),
+            ),
             inputs=[strategy_radio],
-            outputs=[fragment_col],
+            outputs=[fragment_col, num_dock_input],
         )
