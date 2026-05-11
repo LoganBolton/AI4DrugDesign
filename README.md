@@ -1,11 +1,3 @@
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" />
-  <img src="https://img.shields.io/badge/AutoDock_Vina-Molecular_Docking-critical" />
-  <img src="https://img.shields.io/badge/RDKit-Cheminformatics-blue" />
-  <img src="https://img.shields.io/badge/Gradio-Web_UI-orange?logo=gradio" />
-  <img src="https://img.shields.io/badge/GPT--powered-AI_Insights-brightgreen?logo=openai&logoColor=white" />
-</p>
-
 # AI4DrugDesign
 
 **An end-to-end computational drug discovery pipeline.** Enter a protein target, and the system autonomously discovers, filters, docks, and ranks drug candidates -- from a PDB ID to optimized lead compounds in a single session.
