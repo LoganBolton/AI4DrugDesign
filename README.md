@@ -1,6 +1,6 @@
 # AI4DrugDesign
 
-**An end-to-end computational drug discovery pipeline.** Enter a protein target, and the system autonomously discovers, filters, docks, and ranks drug candidates -- from a PDB ID to optimized lead compounds in a single session.
+**An end-to-end computational drug discovery pipeline.** Enter a protein target, and the system autonomously discovers, filters, docks, and ranks candidate compounds.
 
 <p align="center">
   <img src="images/Receptor_Interaction_Viewer.png" width="700" alt="Receptor-ligand interaction viewer showing hydrogen bonds, hydrophobic contacts, and binding pocket residues" />
