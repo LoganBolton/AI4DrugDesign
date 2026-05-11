@@ -16,6 +16,47 @@
 
 ---
 
+### Key Features
+
+The pipeline outputs a ranked table of drug candidates sorted by Vina binding affinity, with ADME scores, molecular weight, and LogP at a glance. Click any compound row to get detailed analysis.
+
+<p align="center">
+  <img src="images/output_results.png" width="700" alt="Final ranked compound results table" />
+</p>
+
+### 2D Structure with Pharmacophore Highlighting
+
+Each compound is rendered with color-coded pharmacophore features -- **blue** for H-bond donors, **red** for H-bond acceptors, **gold** for aromatic systems.
+
+<p align="center">
+  <img src="images/2d_view.png" width="500" alt="2D molecular structure with pharmacophore highlighting" />
+</p>
+
+### 3D Compound Viewer
+
+Interactive 3Dmol.js viewer with the same pharmacophore color scheme in three dimensions. Rotate, zoom, and inspect the molecular geometry.
+
+<p align="center">
+  <img src="images/3d_viewer.png" width="700" alt="3D compound viewer with pharmacophore coloring" />
+</p>
+
+### Receptor-Ligand Interaction Viewer
+
+The compound docked into the protein binding pocket. Green sticks are pocket residues, cyan is the ligand, blue dashed lines show hydrogen bonds, and orange lines show hydrophobic contacts. The interaction panel counts H-bonds, hydrophobic contacts, and pocket residues.
+
+<p align="center">
+  <img src="images/Receptor_Interaction_Viewer.png" width="700" alt="Receptor interaction viewer with contact map" />
+</p>
+
+### Compound Optimization
+
+Select optimization goals (solubility, metabolic stability, BBB permeability, etc.) and get AI-generated structural modification suggestions with goal-specific trade-off analysis.
+
+<p align="center">
+  <img src="images/optimization.png" width="700" alt="Compound optimization interface with AI suggestions" />
+</p>
+
+
 ## Why This Exists
 
 Drug discovery is slow. A single new drug takes **10-15 years** and over **$1 billion** from initial target to market. The earliest stage -- identifying compounds that actually bind a protein target -- is a bottleneck that depends on expensive lab screening or expert medicinal chemists manually searching databases.
@@ -194,51 +235,3 @@ uv run python app.py
 Opens at [http://localhost:7860](http://localhost:7860).
 
 ---
-
-## Screenshots
-
-### Ranked Results
-
-The pipeline outputs a ranked table of drug candidates sorted by Vina binding affinity, with ADME scores, molecular weight, and LogP at a glance. Click any row to drill into detail views.
-
-<p align="center">
-  <img src="images/output_results.png" width="700" alt="Final ranked compound results table" />
-</p>
-
-### 2D Structure with Pharmacophore Highlighting
-
-Each compound is rendered with color-coded pharmacophore features -- **blue** for H-bond donors, **red** for H-bond acceptors, **gold** for aromatic systems.
-
-<p align="center">
-  <img src="images/2d_view.png" width="500" alt="2D molecular structure with pharmacophore highlighting" />
-</p>
-
-### 3D Compound Viewer
-
-Interactive 3Dmol.js viewer with the same pharmacophore color scheme in three dimensions. Rotate, zoom, and inspect the molecular geometry.
-
-<p align="center">
-  <img src="images/3d_viewer.png" width="700" alt="3D compound viewer with pharmacophore coloring" />
-</p>
-
-### Receptor-Ligand Interaction Viewer
-
-The compound docked into the protein binding pocket. Green sticks are pocket residues, cyan is the ligand, blue dashed lines show hydrogen bonds, and orange lines show hydrophobic contacts. The interaction panel counts H-bonds, hydrophobic contacts, and pocket residues.
-
-<p align="center">
-  <img src="images/Receptor_Interaction_Viewer.png" width="700" alt="Receptor interaction viewer with contact map" />
-</p>
-
-### Compound Optimization
-
-Select optimization goals (solubility, metabolic stability, BBB permeability, etc.) and get AI-generated structural modification suggestions with goal-specific trade-off analysis.
-
-<p align="center">
-  <img src="images/optimization.png" width="700" alt="Compound optimization interface with AI suggestions" />
-</p>
-
----
-
-## Built With
-
-[RDKit](https://www.rdkit.org/) | [AutoDock Vina](https://vina.scripps.edu/) | [Meeko](https://github.com/forlilab/Meeko) | [Gradio](https://gradio.app/) | [3Dmol.js](https://3dmol.csb.pitt.edu/) | [ChEMBL](https://www.ebi.ac.uk/chembl/) | [RCSB PDB](https://www.rcsb.org/)
